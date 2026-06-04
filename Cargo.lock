@@ -1012,6 +1012,7 @@ dependencies = [
  "image",
  "libc",
  "multimap",
+ "novel",
  "objc2",
  "objc2-foundation",
  "pdf-extract",
@@ -3140,6 +3141,19 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "novel"
+version = "0.8.52"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -5573,6 +5587,7 @@ dependencies = [
  "atomic",
  "getrandom 0.3.4",
  "js-sys",
+ "serde_core",
  "wasm-bindgen",
 ]
 

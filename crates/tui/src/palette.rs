@@ -71,6 +71,10 @@ pub const WHALE_DIFF_DELETED_BG_RGB: (u8, u8, u8) = (42, 18, 26); // #2A121A
 pub const WHALE_MODE_AGENT_RGB: (u8, u8, u8) = (80, 150, 255); // #5096FF
 pub const WHALE_MODE_YOLO_RGB: (u8, u8, u8) = (255, 100, 100); // #FF6464
 pub const WHALE_MODE_PLAN_RGB: (u8, u8, u8) = (246, 196, 83); // #F6C453 Signal Gold
+// Novel mode: warm purple — distinct from the engineering-mode colors above so
+// the header/footer badge reads as creative-writing rather than a fifth
+// engineering mode. Picked to match the existing "codewhale plum" ink family.
+pub const WHALE_MODE_NOVEL_RGB: (u8, u8, u8) = (180, 120, 220); // #B478DC
 pub const WHALE_MODE_GOAL_RGB: (u8, u8, u8) = (100, 220, 160); // #64DCA0
 pub const WHALE_TOOL_LIVE_RGB: (u8, u8, u8) = (140, 190, 238); // #8CBEEE
 pub const WHALE_TOOL_ISSUE_RGB: (u8, u8, u8) = (198, 150, 160); // #C696A0
@@ -515,6 +519,11 @@ pub const MODE_PLAN: Color = Color::Rgb(
     WHALE_MODE_PLAN_RGB.1,
     WHALE_MODE_PLAN_RGB.2,
 );
+pub const MODE_NOVEL: Color = Color::Rgb(
+    WHALE_MODE_NOVEL_RGB.0,
+    WHALE_MODE_NOVEL_RGB.1,
+    WHALE_MODE_NOVEL_RGB.2,
+);
 pub const MODE_GOAL: Color = Color::Rgb(
     WHALE_MODE_GOAL_RGB.0,
     WHALE_MODE_GOAL_RGB.1,
@@ -633,10 +642,11 @@ pub struct UiTheme {
     pub warning: Color,
     pub success: Color,
     pub info: Color,
-    // Mode badge colors (agent/yolo/plan/goal)
+    // Mode badge colors (agent/yolo/plan/novel/goal)
     pub mode_agent: Color,
     pub mode_yolo: Color,
     pub mode_plan: Color,
+    pub mode_novel: Color,
     pub mode_goal: Color,
     // Footer statusline colors
     pub status_ready: Color,
@@ -719,6 +729,7 @@ pub const UI_THEME: UiTheme = UiTheme {
     mode_agent: MODE_AGENT,
     mode_yolo: MODE_YOLO,
     mode_plan: MODE_PLAN,
+    mode_novel: MODE_NOVEL,
     mode_goal: MODE_GOAL,
     status_ready: TEXT_MUTED,
     status_working: DEEPSEEK_SKY,
@@ -762,6 +773,7 @@ pub const LIGHT_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(53, 120, 229), // blue
     mode_yolo: Color::Rgb(200, 40, 60),   // red
     mode_plan: Color::Rgb(180, 83, 9),    // amber
+    mode_novel: Color::Rgb(120, 80, 180), // violet
     mode_goal: Color::Rgb(80, 180, 130),  // mint green
     status_ready: LIGHT_TEXT_MUTED,
     status_working: Color::Rgb(53, 120, 229),   // blue
@@ -805,6 +817,10 @@ pub const SOLARIZED_LIGHT_UI_THEME: UiTheme = UiTheme {
     mode_agent: SOLARIZED_BLUE,
     mode_yolo: SOLARIZED_RED,
     mode_plan: SOLARIZED_ORANGE,
+    // Solarized has no purple/violet, so Novel uses the cyan accent which
+    // is visually distinct from the agent/yolo/plan hues and from the
+    // green Goal chip.
+    mode_novel: SOLARIZED_CYAN,
     mode_goal: SOLARIZED_GREEN,
     status_ready: SOLARIZED_CYAN,
     status_working: SOLARIZED_BLUE,
@@ -848,6 +864,7 @@ pub const GRAYSCALE_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(200, 200, 200),
     mode_yolo: GRAYSCALE_TEXT_BODY,
     mode_plan: GRAYSCALE_TEXT_MUTED,
+    mode_novel: GRAYSCALE_TEXT_BODY,
     mode_goal: GRAYSCALE_TEXT_SOFT,
     status_ready: GRAYSCALE_TEXT_MUTED,
     status_working: GRAYSCALE_TEXT_SOFT,
@@ -891,6 +908,7 @@ pub const CATPPUCCIN_MOCHA_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(0x89, 0xb4, 0xfa),      // blue
     mode_yolo: Color::Rgb(0xf3, 0x8b, 0xa8),       // red
     mode_plan: Color::Rgb(0xfa, 0xb3, 0x87),       // peach
+    mode_novel: Color::Rgb(0x94, 0xe2, 0xd5),      // teal
     mode_goal: Color::Rgb(0xa6, 0xe3, 0xa1),       // green
     status_ready: Color::Rgb(0x7f, 0x84, 0x9c),    // overlay1
     status_working: Color::Rgb(0x74, 0xc7, 0xec),  // sapphire
@@ -934,6 +952,7 @@ pub const TOKYO_NIGHT_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(0x7a, 0xa2, 0xf7),      // blue
     mode_yolo: Color::Rgb(0xf7, 0x76, 0x8e),       // red
     mode_plan: Color::Rgb(0xff, 0x9e, 0x64),       // orange
+    mode_novel: Color::Rgb(0x7d, 0xcf, 0xff),      // cyan
     mode_goal: Color::Rgb(0x9e, 0xce, 0x6a),       // green
     status_ready: Color::Rgb(0x56, 0x5f, 0x89),    // comment
     status_working: Color::Rgb(0x7d, 0xcf, 0xff),  // cyan
@@ -977,6 +996,7 @@ pub const DRACULA_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(0xbd, 0x93, 0xf9),      // purple
     mode_yolo: Color::Rgb(0xff, 0x55, 0x55),       // red
     mode_plan: Color::Rgb(0xff, 0xb8, 0x6c),       // orange
+    mode_novel: Color::Rgb(0x94, 0xe2, 0xd5),      // teal
     mode_goal: Color::Rgb(0x50, 0xfa, 0x7b),       // green
     status_ready: Color::Rgb(0x62, 0x72, 0xa4),    // comment
     status_working: Color::Rgb(0x8b, 0xe9, 0xfd),  // cyan
@@ -1032,6 +1052,9 @@ pub const TERMINAL_UI_THEME: UiTheme = UiTheme {
     // so the mode indicator and warning chip don't collide on themes that
     // render both in the status row.
     mode_plan: Color::Magenta,
+    // Novel uses Cyan so it stays distinct from the warm/cool split above and
+    // the Goal green chip.
+    mode_novel: Color::Cyan,
     mode_goal: Color::Green,
     // DarkGray gives "Ready" a low-contrast but still distinguishable hue
     // versus default body text (which is `Color::Reset` on this theme).
@@ -1077,6 +1100,7 @@ pub const GRUVBOX_DARK_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(0x83, 0xa5, 0x98),      // blue
     mode_yolo: Color::Rgb(0xfb, 0x49, 0x34),       // red
     mode_plan: Color::Rgb(0xfe, 0x80, 0x19),       // orange
+    mode_novel: Color::Rgb(0xd3, 0x86, 0x9b),      // purple
     mode_goal: Color::Rgb(0x8e, 0xc0, 0x7c),       // green
     status_ready: Color::Rgb(0x92, 0x83, 0x74),    // gray
     status_working: Color::Rgb(0x8e, 0xc0, 0x7c),  // aqua
@@ -1126,6 +1150,7 @@ pub const CLAUDE_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(0xcc, 0x78, 0x5c), // coral
     mode_yolo: Color::Rgb(0xc6, 0x45, 0x45),  // red
     mode_plan: Color::Rgb(0xe8, 0xa5, 0x5a),  // amber
+    mode_novel: Color::Rgb(0x9b, 0x8e, 0xc6), // lavender
     mode_goal: Color::Rgb(0x5d, 0xb8, 0x72),  // green
     // Footer statusline
     status_ready: Color::Rgb(0xa0, 0x9d, 0x96),
@@ -1228,6 +1253,7 @@ pub const MATRIX_UI_THEME: UiTheme = UiTheme {
     mode_agent: Color::Rgb(0, 153, 0),
     mode_yolo: Color::Rgb(255, 100, 100),
     mode_plan: Color::Rgb(255, 170, 60),
+    mode_novel: Color::Rgb(170, 130, 220),
     mode_goal: Color::Rgb(170, 255, 170),
     status_ready: Color::Rgb(0, 85, 0),
     status_working: Color::Rgb(

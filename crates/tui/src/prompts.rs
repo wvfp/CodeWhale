@@ -11,6 +11,7 @@ use crate::models::SystemPrompt;
 use crate::project_context::{ProjectContext, load_project_context_with_parents};
 use crate::tui::app::AppMode;
 use crate::tui::approval::ApprovalMode;
+use novel::CreationStage;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug, Clone)]
@@ -586,6 +587,20 @@ pub const AGENT_MODE: &str = include_str!("prompts/modes/agent.md");
 pub const PLAN_MODE: &str = include_str!("prompts/modes/plan.md");
 pub const YOLO_MODE: &str = include_str!("prompts/modes/yolo.md");
 
+/// Novel (web novel creation) mode overlay. Sets the model up as a long-form
+/// Chinese web-novel writing partner, locks in the five-stage workflow, and
+/// restricts the active tool set to novel tools + safe utilities.
+pub const NOVEL_MODE: &str = include_str!("prompts/modes/novel.md");
+
+/// Stage delta overlays — appended to the system prompt when the user is in
+/// a particular creation stage. These focus the model's behaviour on the
+/// deliverable for that stage.
+pub const STAGE_DELTA_CONCEPT: &str = include_str!("prompts/stage_deltas/concept.md");
+pub const STAGE_DELTA_OUTLINE: &str = include_str!("prompts/stage_deltas/outline.md");
+pub const STAGE_DELTA_DETAIL: &str = include_str!("prompts/stage_deltas/detail.md");
+pub const STAGE_DELTA_DRAFT: &str = include_str!("prompts/stage_deltas/draft.md");
+pub const STAGE_DELTA_POLISH: &str = include_str!("prompts/stage_deltas/polish.md");
+
 /// Approval-policy overlays — whether tool calls are auto-approved,
 /// require confirmation, or are blocked.
 pub const AUTO_APPROVAL: &str = include_str!("prompts/approvals/auto.md");
@@ -650,17 +665,26 @@ impl Personality {
 
 // ── Composition ───────────────────────────────────────────────────────
 
+/// Mode-specific prompt layer for `AppMode::Novel`. Returns a placeholder
+/// string that re-anchors the model toward creative-writing work; the layered
+/// composer treats this as a regular `&'static str` slot.
+fn mode_prompt_novel() -> &'static str {
+    NOVEL_MODE
+}
+
 fn mode_prompt(mode: AppMode) -> &'static str {
     match mode {
         AppMode::Agent => AGENT_MODE,
         AppMode::Yolo => YOLO_MODE,
         AppMode::Plan => PLAN_MODE,
+        AppMode::Novel => mode_prompt_novel(),
     }
 }
 
 fn default_approval_mode_for_mode(mode: AppMode) -> ApprovalMode {
     match mode {
         AppMode::Agent => ApprovalMode::Suggest,
+        AppMode::Novel => ApprovalMode::Suggest,
         AppMode::Yolo => ApprovalMode::Auto,
         AppMode::Plan => ApprovalMode::Never,
     }
@@ -670,7 +694,7 @@ fn approval_prompt_for_mode(mode: AppMode, approval_mode: ApprovalMode) -> &'sta
     match mode {
         AppMode::Yolo => AUTO_APPROVAL,
         AppMode::Plan => NEVER_APPROVAL,
-        AppMode::Agent => match approval_mode {
+        AppMode::Agent | AppMode::Novel => match approval_mode {
             ApprovalMode::Auto => AUTO_APPROVAL,
             ApprovalMode::Suggest => SUGGEST_APPROVAL,
             ApprovalMode::Never => NEVER_APPROVAL,
@@ -813,6 +837,45 @@ fn compose_mode_prompt_with_approval_and_model(
     model_id: &str,
 ) -> String {
     compose_prompt_with_approval_and_model(mode, Personality::Calm, approval_mode, model_id)
+}
+
+/// Return the stage-delta prompt overlay for a given `CreationStage`.
+///
+/// Returns `None` for any non-Novel mode, or for a stage the project does
+/// not yet know about. The intent is for the TUI to call this only after
+/// the user has switched into `AppMode::Novel` via `/mode novel`.
+pub fn stage_delta_prompt(stage: &CreationStage) -> Option<&'static str> {
+    match stage {
+        CreationStage::Concept => Some(STAGE_DELTA_CONCEPT),
+        CreationStage::Outline => Some(STAGE_DELTA_OUTLINE),
+        CreationStage::Detail => Some(STAGE_DELTA_DETAIL),
+        CreationStage::Draft => Some(STAGE_DELTA_DRAFT),
+        CreationStage::Polish => Some(STAGE_DELTA_POLISH),
+    }
+}
+
+/// Compose the system prompt for `AppMode::Novel` including the stage-delta
+/// overlay. Other modes fall through to the standard composition. This is
+/// the entry point the TUI should call when assembling a novel-mode prompt.
+pub fn compose_novel_prompt(
+    stage: &CreationStage,
+    personality: Personality,
+    approval_mode: ApprovalMode,
+) -> String {
+    let mut base = compose_prompt_with_approval_and_model(
+        AppMode::Novel,
+        personality,
+        approval_mode,
+        "codewhale",
+    );
+    if let Some(delta) = stage_delta_prompt(stage) {
+        let delta = delta.trim();
+        if !delta.is_empty() {
+            base.push_str("\n\n");
+            base.push_str(delta);
+        }
+    }
+    base
 }
 
 // ── Public API ────────────────────────────────────────────────────────
@@ -987,8 +1050,8 @@ pub fn system_prompt_for_mode_with_context_skills_session_and_approval(
         full_prompt = format!("{full_prompt}\n\n{block}");
     }
 
-    // 4. Context Management (Agent / Yolo only).
-    if matches!(mode, AppMode::Agent | AppMode::Yolo) {
+    // 4. Context Management (Agent / Novel / Yolo).
+    if matches!(mode, AppMode::Agent | AppMode::Novel | AppMode::Yolo) {
         full_prompt.push_str(
             "\n\n## Context Management\n\n\
              When the conversation gets long (you'll see a context usage indicator), you can:\n\
@@ -1660,7 +1723,7 @@ mod tests {
             !contains_cjk(BASE_PROMPT),
             "base prompt must not contain static CJK priming tokens"
         );
-        for mode in [AppMode::Agent, AppMode::Plan, AppMode::Yolo] {
+        for mode in [AppMode::Agent, AppMode::Plan, AppMode::Yolo, AppMode::Novel] {
             let taxonomy = render_core_tool_taxonomy_block(mode);
             assert!(
                 !contains_cjk(&taxonomy),
@@ -2022,6 +2085,29 @@ mod tests {
         assert!(
             compose_prompt(AppMode::Plan, Personality::Calm).contains("Approval Policy: Never")
         );
+        assert!(
+            compose_prompt(AppMode::Novel, Personality::Calm).contains("Approval Policy: Suggest"),
+            "Novel mode must inherit Agent's Suggest approval default"
+        );
+    }
+
+    #[test]
+    fn novel_mode_uses_novel_specific_prompt() {
+        // The novel prompt layer is a placeholder for now (full creative-writing
+        // guidance will land in `prompts/modes/novel.md`); pin the placeholder
+        // marker so a future silent replacement of `mode_prompt_novel` is
+        // caught by the test instead of by users noticing the mode regressed
+        // to a software-engineering voice.
+        assert_eq!(mode_prompt_novel(), NOVEL_MODE);
+        let prompt = compose_prompt(AppMode::Novel, Personality::Calm);
+        assert!(
+            prompt.contains("Novel Creation Mode"),
+            "Novel mode prompt must contain the placeholder novel header; got: {prompt:?}"
+        );
+        assert!(
+            prompt.contains("professional web novel writing assistant"),
+            "Novel mode prompt must anchor the model toward novel writing; got: {prompt:?}"
+        );
     }
 
     #[test]
@@ -2149,7 +2235,7 @@ mod tests {
     /// user's language" directive while keeping the heading.
     #[test]
     fn language_mirroring_section_present_in_all_modes() {
-        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan] {
+        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan, AppMode::Novel] {
             let prompt = compose_prompt(mode, Personality::Calm);
             assert!(
                 prompt.contains("## Language"),
@@ -2343,7 +2429,7 @@ mod tests {
         // Suspect #4 from #263: mode prompt churn within a single mode.
         // Two calls with identical (mode, personality) inputs must produce
         // identical bytes — anything else is a cache buster.
-        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan] {
+        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan, AppMode::Novel] {
             for personality in [Personality::Calm, Personality::Playful] {
                 let a = compose_prompt(mode, personality);
                 let b = compose_prompt(mode, personality);
@@ -2365,7 +2451,7 @@ mod tests {
         let tmp = tempdir().expect("tempdir");
         let workspace = tmp.path();
 
-        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan] {
+        for mode in [AppMode::Agent, AppMode::Yolo, AppMode::Plan, AppMode::Novel] {
             let a = match system_prompt_for_mode_with_context(mode, workspace, None) {
                 SystemPrompt::Text(text) => text,
                 SystemPrompt::Blocks(_) => panic!("expected text system prompt"),

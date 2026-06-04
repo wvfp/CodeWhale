@@ -3156,6 +3156,7 @@ fn parse_mode(mode: &str) -> AppMode {
     match mode.trim().to_ascii_lowercase().as_str() {
         "plan" => AppMode::Plan,
         "yolo" => AppMode::Yolo,
+        "novel" => AppMode::Novel,
         _ => AppMode::Agent,
     }
 }
@@ -5165,6 +5166,7 @@ mod tests {
     fn parse_mode_defaults_to_agent() {
         assert_eq!(parse_mode("unknown"), AppMode::Agent);
         assert_eq!(parse_mode("plan"), AppMode::Plan);
+        assert_eq!(parse_mode("novel"), AppMode::Novel);
     }
 
     fn rebind_event(event: &str, agent_id: &str, seq: u64) -> RuntimeEventRecord {

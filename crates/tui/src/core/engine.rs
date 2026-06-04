@@ -1353,6 +1353,12 @@ impl Engine {
                 "Any previously planned operations that require writes or shell access \
                  must wait until the mode changes back to Agent or YOLO.",
             ),
+            AppMode::Novel => (
+                "novel writing workflow — the engine assists with outline, drafting, \
+                 and polishing narrative content while file operations remain gated",
+                "Re-evaluate any previously blocked operations that were needed only \
+                 for general code work; they remain gated under Novel mode.",
+            ),
         };
         Message {
             role: "user".to_string(),
@@ -1672,6 +1678,15 @@ In {new} mode: {policy}\n\n\
         };
 
         let mut tool_registry = match mode {
+            // Novel is grouped with Agent/Yolo because it shares the same tool
+            // surface and the same approval flow (Suggest by default). The
+            // subagent runtime is intentionally NOT registered for Novel —
+            // long-form writing sessions don't need a worker pool, and a
+            // model that drifts into a worker-spawn pattern would fight the
+            // creative-writing voice. The match arm just needs to fall
+            // through to the default builder below, so the wildcard pattern
+            // is enough; we keep the explicit Agent|Yolo listing for the
+            // subagent branch that *does* differ from the default.
             AppMode::Agent | AppMode::Yolo => {
                 if self.config.features.enabled(Feature::Subagents) {
                     let runtime = if let Some(client) = self.deepseek_client.clone() {

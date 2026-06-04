@@ -29,6 +29,12 @@ pub(crate) fn sandbox_policy_for_mode(mode: AppMode, workspace: &Path) -> Sandbo
             exclude_slash_tmp: false,
         },
         AppMode::Yolo => SandboxPolicy::DangerFullAccess,
+        AppMode::Novel => SandboxPolicy::WorkspaceWrite {
+            writable_roots: vec![workspace.to_path_buf()],
+            network_access: true,
+            exclude_tmpdir: false,
+            exclude_slash_tmp: false,
+        },
     }
 }
 
@@ -59,6 +65,7 @@ impl Engine {
                 .with_todo_tool(todo_list)
                 .with_plan_tool(plan_state)
                 .with_goal_tools(self.config.goal_state.clone())
+                .with_novel_tools()
         };
 
         builder = builder

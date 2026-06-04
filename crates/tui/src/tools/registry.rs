@@ -776,6 +776,24 @@ impl ToolRegistryBuilder {
         self.with_tool(Arc::new(RevertTurnTool))
     }
 
+    /// Include novel-specific tools (novel_init, novel_outline_build, etc.).
+    ///
+    /// Pulls every tool registered by `novel::tools::register_novel_tools`,
+    /// wraps each one in a `NovelAdapter` (which bridges the novel crate's
+    /// minimal `ToolSpec` trait into the TUI's richer one), and appends them
+    /// to the builder. Used in Agent / Novel modes so the model can drive
+    /// the novel creation pipeline (init → outline → write → fact_lock →
+    /// consistency_check → deai_check → …).
+    #[must_use]
+    pub fn with_novel_tools(self) -> Self {
+        use super::novel_adapter::collect_novel_tools;
+        let mut me = self;
+        for tool in collect_novel_tools() {
+            me = me.with_tool(tool);
+        }
+        me
+    }
+
     /// Include Xiaomi MiMo speech/TTS tools (`speech`, `tts`).
     #[must_use]
     pub fn with_speech_tools(

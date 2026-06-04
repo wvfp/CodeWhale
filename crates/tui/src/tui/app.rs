@@ -145,6 +145,11 @@ pub enum AppMode {
     Agent,
     Yolo,
     Plan,
+    /// Long-form web-novel writing mode. Mirrors Agent's toolset and
+    /// approval behaviour (Suggest) but is steered by a novel-specific
+    /// system prompt so the model focuses on character / chapter / plot
+    /// work instead of software-engineering tasks.
+    Novel,
 }
 
 /// One row in the per-turn cache-telemetry ring (`/cache` debug surface, #263).
@@ -770,6 +775,7 @@ impl AppMode {
         match value.trim().to_ascii_lowercase().as_str() {
             "plan" => Self::Plan,
             "yolo" => Self::Yolo,
+            "novel" => Self::Novel,
             _ => Self::Agent,
         }
     }
@@ -780,6 +786,7 @@ impl AppMode {
             Self::Agent => "agent",
             Self::Yolo => "yolo",
             Self::Plan => "plan",
+            Self::Novel => "novel",
         }
     }
 
@@ -789,6 +796,7 @@ impl AppMode {
             AppMode::Agent => "AGENT",
             AppMode::Yolo => "YOLO",
             AppMode::Plan => "PLAN",
+            AppMode::Novel => "NOVEL",
         }
     }
 
@@ -799,6 +807,7 @@ impl AppMode {
             AppMode::Agent => "Agent mode - autonomous task execution with tools",
             AppMode::Yolo => "YOLO mode - full tool access without approvals",
             AppMode::Plan => "Plan mode - design before implementing",
+            AppMode::Novel => "Novel mode - long-form web novel writing assistant",
         }
     }
 }
@@ -2308,6 +2317,7 @@ impl App {
             AppMode::Plan => AppMode::Agent,
             AppMode::Agent => AppMode::Yolo,
             AppMode::Yolo => AppMode::Plan,
+            AppMode::Novel => AppMode::Plan,
         };
         let _ = self.set_mode(next);
     }
@@ -2319,6 +2329,7 @@ impl App {
             AppMode::Agent => AppMode::Plan,
             AppMode::Yolo => AppMode::Agent,
             AppMode::Plan => AppMode::Yolo,
+            AppMode::Novel => AppMode::Yolo,
         };
         let _ = self.set_mode(next);
     }
@@ -4879,6 +4890,12 @@ pub enum AppAction {
     OpenProviderPicker,
     /// Open the `/mode` picker modal for Agent / Plan / YOLO.
     OpenModePicker,
+    /// Open the narrative tree view (`/novel tree`).
+    OpenNovelTreeView,
+    /// Open the character list view (`/novel characters`).
+    OpenNovelCharactersView,
+    /// Open the chapter progress view (`/novel progress`).
+    OpenNovelProgressView,
     /// Refresh the engine prompt after the UI operating mode changes.
     ModeChanged(AppMode),
     /// Open the `/statusline` multi-select picker for footer items.
@@ -5938,6 +5955,12 @@ mod tests {
         app.cycle_mode();
         // Mode should have changed
         assert_ne!(app.mode, initial_mode);
+
+        // Forward cycle from Novel should land on a defined next mode (Plan),
+        // not panic or fall through to an undefined state.
+        app.mode = AppMode::Novel;
+        app.cycle_mode();
+        assert_eq!(app.mode, AppMode::Plan);
     }
 
     #[test]
@@ -5955,6 +5978,13 @@ mod tests {
         app.mode = AppMode::Yolo;
         app.cycle_mode_reverse();
         assert_eq!(app.mode, AppMode::Agent);
+
+        // Novel sits outside the Plan/Agent/Yolo cycle but `cycle_mode_reverse`
+        // should still produce a valid mode; the implementation routes it back
+        // to Yolo so a user can step into the rest of the cycle.
+        app.mode = AppMode::Novel;
+        app.cycle_mode_reverse();
+        assert_eq!(app.mode, AppMode::Yolo);
     }
 
     #[test]
@@ -5964,16 +5994,19 @@ mod tests {
             AppMode::Plan => AppMode::Agent,
             AppMode::Agent => AppMode::Yolo,
             AppMode::Yolo => AppMode::Plan,
+            AppMode::Novel => AppMode::Agent,
         };
         let second_mode = match first_mode {
             AppMode::Plan => AppMode::Agent,
             AppMode::Agent => AppMode::Yolo,
             AppMode::Yolo => AppMode::Plan,
+            AppMode::Novel => AppMode::Agent,
         };
         let third_mode = match second_mode {
             AppMode::Plan => AppMode::Agent,
             AppMode::Agent => AppMode::Yolo,
             AppMode::Yolo => AppMode::Plan,
+            AppMode::Novel => AppMode::Agent,
         };
 
         app.set_mode(first_mode);

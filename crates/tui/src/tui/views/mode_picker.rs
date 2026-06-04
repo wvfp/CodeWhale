@@ -1,4 +1,4 @@
-//! `/mode` picker for Agent / Plan / YOLO.
+//! `/mode` picker for Agent / Plan / YOLO / Novel.
 
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
@@ -39,6 +39,15 @@ const MODE_ROWS: &[ModeRow] = &[
         number: '3',
         name: "YOLO",
         hint: "Shell + trust + auto-approve",
+    },
+    ModeRow {
+        mode: AppMode::Novel,
+        number: '4',
+        // Bilingual label keeps the option discoverable for both English and
+        // Chinese-speaking users; the picker is the first place a novel
+        // writer will look, so the canonical name should appear immediately.
+        name: "Novel 小说创作",
+        hint: "Long-form web novel writing",
     },
 ];
 
@@ -114,7 +123,8 @@ impl ModalView for ModePickerView {
 
     fn render(&self, area: Rect, buf: &mut Buffer) {
         let popup_width = 68.min(area.width.saturating_sub(4)).max(44);
-        let popup_height = 9.min(area.height.saturating_sub(4)).max(7);
+        // 4 rows + 1 header line + 1 blank line + top/bottom border + 2 padding rows
+        let popup_height = 11.min(area.height.saturating_sub(4)).max(7);
         let popup_area = Rect {
             x: area.x + (area.width.saturating_sub(popup_width)) / 2,
             y: area.y + (area.height.saturating_sub(popup_height)) / 2,
@@ -219,5 +229,23 @@ mod tests {
             }
             other => panic!("expected ModeSelected, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn number_four_selects_novel_mode() {
+        let mut view = ModePickerView::new(AppMode::Agent);
+        let action = view.handle_key(KeyEvent::new(KeyCode::Char('4'), KeyModifiers::NONE));
+        match action {
+            ViewAction::EmitAndClose(ViewEvent::ModeSelected { mode }) => {
+                assert_eq!(mode, AppMode::Novel);
+            }
+            other => panic!("expected ModeSelected, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn opens_on_novel_mode() {
+        let view = ModePickerView::new(AppMode::Novel);
+        assert_eq!(view.selected_mode(), AppMode::Novel);
     }
 }

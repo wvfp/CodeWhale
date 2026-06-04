@@ -30,6 +30,7 @@ pub mod image_ocr;
 pub mod js_execution;
 pub mod large_output_router;
 pub mod notify;
+pub mod novel_adapter;
 pub mod pandoc;
 pub mod parallel;
 pub mod plan;

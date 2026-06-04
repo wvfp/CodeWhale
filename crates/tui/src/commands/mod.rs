@@ -18,6 +18,7 @@ mod jobs;
 mod mcp;
 mod memory;
 mod network;
+mod novel;
 mod note;
 mod provider;
 mod queue;
@@ -241,6 +242,12 @@ pub const COMMANDS: &[CommandInfo] = &[
         aliases: &[],
         usage: "/note [add|list|show|edit|remove|clear|path]",
         description_id: MessageId::CmdNoteDescription,
+    },
+    CommandInfo {
+        name: "novel",
+        aliases: &["xiaoshuo", "xs"],
+        usage: "/novel [tree|characters|progress]",
+        description_id: MessageId::CmdNovelDescription,
     },
     CommandInfo {
         name: "memory",
@@ -574,6 +581,7 @@ pub fn execute(cmd: &str, app: &mut App) -> CommandResult {
         "home" | "stats" | "overview" | "zhuye" | "shouye" => core::home_dashboard(app),
         "workspace" | "cwd" => core::workspace_switch(app, arg),
         "note" => note::note(app, arg),
+        "novel" | "xiaoshuo" | "xs" => novel::novel(app, arg),
         "memory" => memory::memory(app, arg),
         "attach" | "image" | "media" | "fujian" => attachment::attach(app, arg),
         "task" | "tasks" => task::task(app, arg),

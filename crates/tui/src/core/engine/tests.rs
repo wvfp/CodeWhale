@@ -1432,7 +1432,7 @@ fn plan_mode_toggle_preserves_catalog_byte_stability() {
 fn parent_turn_registry_includes_goal_tools_for_all_modes() {
     let (engine, _handle) = Engine::new(EngineConfig::default(), &Config::default());
 
-    for mode in [AppMode::Plan, AppMode::Agent, AppMode::Yolo] {
+    for mode in [AppMode::Plan, AppMode::Agent, AppMode::Yolo, AppMode::Novel] {
         let registry = engine
             .build_turn_tool_registry_builder(
                 mode,

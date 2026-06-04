@@ -4071,6 +4071,7 @@ async fn run_event_loop(
                             AppMode::Plan => AppMode::Agent,
                             AppMode::Agent => AppMode::Yolo,
                             AppMode::Yolo => AppMode::Plan,
+                            AppMode::Novel => AppMode::Plan,
                         };
                         apply_mode_update(app, &engine_handle, new_mode).await;
                     }
@@ -5427,6 +5428,265 @@ fn open_text_pager(app: &mut App, title: String, content: String) {
     ));
 }
 
+/// 轻量级小说项目快照 — 供 TUI 弹窗视图使用。
+///
+/// 三个 TUI 视图（叙事树 / 人物列表 / 章节进度）都基于磁盘上的
+/// `.novelwhale/`、`outline/`、`characters/`、`chapters/` 目录读出来，
+/// 不直接持有 `Session`（那需要先经过 Engine）。本结构只挑出视图需要的字段。
+#[derive(Debug, Default, Clone)]
+struct NovelSnapshot {
+    graph: novel::model::graph::NarrativeGraph,
+    characters: Vec<novel::model::character::Character>,
+    chapters: Vec<novel::model::chapter::Chapter>,
+    stage: Option<novel::model::stage::CreationStage>,
+    pipeline: Option<novel::agents::state::PipelineRecord>,
+}
+
+impl NovelSnapshot {
+    /// 从工作区目录读出小说项目快照。
+    ///
+    /// 任何子文件缺失 / 反序列化失败都不会中断读取，而是把对应字段留空，
+    /// 这样空项目（只有 `.novelwhale/novel.toml` 还没建）也能弹空视图。
+    fn load(workspace: &std::path::Path) -> Self {
+        let mut snap = Self::default();
+
+        // 阶段：先从 session 中拿
+        snap.stage = None; // 由调用方注入。
+
+        // 1) 叙事图：扫描 `outline/arcs/*.md` 的标题 + `outline/chapters/*.md` 的标题。
+        snap.graph = load_narrative_graph(workspace);
+
+        // 2) 人物：扫描 `characters/*.md` 的第一行作为名字。
+        snap.characters = load_characters(workspace);
+
+        // 3) 章节：扫描 `chapters/ch_NNN_*.md` 文件名解析。
+        snap.chapters = load_chapters(workspace);
+
+        // 4) 流水线：直接读 `.novelwhale/pipeline.json`。
+        snap.pipeline = load_pipeline(workspace);
+
+        snap
+    }
+}
+
+fn load_narrative_graph(workspace: &std::path::Path) -> novel::model::graph::NarrativeGraph {
+    use novel::model::chapter::NarrativeNodeType;
+    use novel::model::graph::{ArcType, NarrativeGraph, NarrativeNode, StoryArc};
+
+    let mut graph = NarrativeGraph::default();
+
+    let arcs_dir = workspace.join("outline").join("arcs");
+    if let Ok(rd) = std::fs::read_dir(&arcs_dir) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            let title = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| !l.trim().is_empty() && !l.trim().starts_with('#'))
+                        .map(|l| l.trim().trim_start_matches('#').trim().to_string())
+                })
+                .unwrap_or_else(|| {
+                    path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("未命名卷")
+                        .to_string()
+                });
+            let arc_id = uuid::Uuid::new_v4();
+            graph.arcs.push(StoryArc {
+                id: arc_id,
+                name: title,
+                arc_type: ArcType::MainLine,
+                nodes: Vec::new(),
+            });
+        }
+    }
+
+    let chapters_dir = workspace.join("outline").join("chapters");
+    if let Ok(rd) = std::fs::read_dir(&chapters_dir) {
+        for entry in rd.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                continue;
+            }
+            let title = std::fs::read_to_string(&path)
+                .ok()
+                .and_then(|s| {
+                    s.lines()
+                        .find(|l| !l.trim().is_empty())
+                        .map(|l| l.trim().trim_start_matches('#').trim().to_string())
+                })
+                .unwrap_or_else(|| {
+                    path.file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("未命名节拍")
+                        .to_string()
+                });
+            // 简化版：把所有 outline 节点挂到第一个弧线（或新建一个）。
+            if graph.arcs.is_empty() {
+                graph.arcs.push(StoryArc {
+                    id: uuid::Uuid::new_v4(),
+                    name: "默认卷".to_string(),
+                    arc_type: ArcType::MainLine,
+                    nodes: Vec::new(),
+                });
+            }
+            let node = NarrativeNode {
+                id: uuid::Uuid::new_v4(),
+                title,
+                node_type: NarrativeNodeType::Conflict,
+                chapter_ref: None,
+                emotional_valence: 0.0,
+                tension: 0.5,
+            };
+            graph.arcs[0].nodes.push(node.id);
+            graph.nodes.push(node);
+        }
+    }
+
+    graph
+}
+
+fn load_characters(workspace: &std::path::Path) -> Vec<novel::model::character::Character> {
+    use novel::model::character::{Character, CharacterStatus};
+
+    let mut out = Vec::new();
+    let dir = workspace.join("characters");
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return out;
+    };
+    for entry in rd.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("md") {
+            continue;
+        }
+        let Ok(body) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        let first_line = body
+            .lines()
+            .find(|l| !l.trim().is_empty())
+            .map(|l| l.trim().trim_start_matches('#').trim().to_string())
+            .unwrap_or_else(|| {
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("未命名角色")
+                    .to_string()
+            });
+        out.push(Character {
+            name: first_line,
+            aliases: Vec::new(),
+            age: None,
+            appearance: None,
+            personality: None,
+            background: None,
+            goals: Vec::new(),
+            relationships: Vec::new(),
+            status: CharacterStatus::Alive,
+        });
+    }
+    out
+}
+
+fn load_chapters(workspace: &std::path::Path) -> Vec<novel::model::chapter::Chapter> {
+    use novel::model::chapter::{Chapter, ChapterStatus, NarrativeNodeType};
+
+    let mut out = Vec::new();
+    let dir = workspace.join("chapters");
+    let Ok(rd) = std::fs::read_dir(&dir) else {
+        return out;
+    };
+    let mut entries: Vec<_> = rd
+        .flatten()
+        .filter(|e| {
+            e.path()
+                .extension()
+                .and_then(|ext| ext.to_str())
+                == Some("md")
+        })
+        .collect();
+    entries.sort_by_key(|e| e.file_name());
+
+    for (idx, entry) in entries.iter().enumerate() {
+        let path = entry.path();
+        let file_name = entry.file_name().to_string_lossy().to_string();
+        // 兼容 ch_NNN_*.md 命名，也兼容纯数字 / 纯标题。
+        let number = file_name
+            .split('_')
+            .next()
+            .and_then(|s| s.trim_start_matches("ch").parse::<u32>().ok())
+            .unwrap_or(idx as u32 + 1);
+        let title = std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|s| {
+                s.lines()
+                    .find(|l| !l.trim().is_empty())
+                    .map(|l| l.trim().trim_start_matches('#').trim().to_string())
+            })
+            .unwrap_or_else(|| {
+                path.file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("未命名章节")
+                    .to_string()
+            });
+        let status = ChapterStatus::Planned; // 由 TUI 后续按文件大小/状态头判定。
+        out.push(Chapter {
+            id: uuid::Uuid::new_v4(),
+            title,
+            number,
+            outline: None,
+            content: None,
+            status,
+            node_type: NarrativeNodeType::Conflict,
+            emotional_valence: 0.0,
+            tension: 0.5,
+        });
+    }
+    out
+}
+
+fn load_pipeline(
+    workspace: &std::path::Path,
+) -> Option<novel::agents::state::PipelineRecord> {
+    let path = workspace.join(".novelwhale").join("pipeline.json");
+    let body = std::fs::read_to_string(&path).ok()?;
+    serde_json::from_str(&body).ok()
+}
+
+fn open_novel_tree_view(app: &mut App) {
+    let workspace = app.workspace.clone();
+    let snap = NovelSnapshot::load(&workspace);
+    let view = crate::tui::views::novel_views::NarrativeTreeView::new(
+        snap.graph,
+        snap.pipeline,
+    );
+    app.view_stack.push(view);
+}
+
+fn open_novel_characters_view(app: &mut App) {
+    let workspace = app.workspace.clone();
+    let snap = NovelSnapshot::load(&workspace);
+    let view = crate::tui::views::novel_views::CharacterListView::new(
+        snap.characters,
+        snap.pipeline,
+    );
+    app.view_stack.push(view);
+}
+
+fn open_novel_progress_view(app: &mut App) {
+    let workspace = app.workspace.clone();
+    let snap = NovelSnapshot::load(&workspace);
+    let view = crate::tui::views::novel_views::ChapterProgressView::new(
+        snap.chapters,
+        snap.pipeline,
+        snap.stage,
+    );
+    app.view_stack.push(view);
+}
+
 pub(crate) fn open_context_inspector(app: &mut App) {
     let width = app
         .viewport
@@ -5720,6 +5980,15 @@ async fn apply_command_result(
                             app.api_provider,
                         ));
                 }
+            }
+            AppAction::OpenNovelTreeView => {
+                open_novel_tree_view(app);
+            }
+            AppAction::OpenNovelCharactersView => {
+                open_novel_characters_view(app);
+            }
+            AppAction::OpenNovelProgressView => {
+                open_novel_progress_view(app);
             }
             AppAction::OpenFeedbackPicker => {
                 if app.view_stack.top_kind() != Some(ModalKind::FeedbackPicker) {
@@ -7333,6 +7602,20 @@ async fn handle_view_events(
                 engine_handle.cancel();
                 mark_active_turn_cancelled_locally(app);
                 app.status_message = Some("Request cancelled".to_string());
+            }
+            ViewEvent::NovelNodeSelected { node_id } => {
+                // TUI 视图选中了某个叙事节点 — 当前阶段在状态栏打一条提示，
+                // 等到后续接入编辑管线后再触发"跳到该节点对应章节"等动作。
+                app.status_message = Some(format!("已选中叙事节点 {node_id}"));
+                app.needs_redraw = true;
+            }
+            ViewEvent::NovelCharacterSelected { character_name } => {
+                app.status_message = Some(format!("已选中人物 {character_name}"));
+                app.needs_redraw = true;
+            }
+            ViewEvent::NovelChapterSelected { chapter_number } => {
+                app.status_message = Some(format!("定位到第 {chapter_number} 章"));
+                app.needs_redraw = true;
             }
         }
     }

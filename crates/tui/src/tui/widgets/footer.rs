@@ -310,11 +310,13 @@ fn mode_style(app: &App) -> (&'static str, Color) {
         AppMode::Agent => "agent",
         AppMode::Yolo => "yolo",
         AppMode::Plan => "plan",
+        AppMode::Novel => "novel",
     };
     let color = match app.mode {
         AppMode::Agent => app.ui_theme.mode_agent,
         AppMode::Yolo => app.ui_theme.mode_yolo,
         AppMode::Plan => app.ui_theme.mode_plan,
+        AppMode::Novel => app.ui_theme.mode_novel,
     };
     (label, color)
 }
@@ -968,6 +970,7 @@ mod tests {
             (AppMode::Agent, "agent", palette::MODE_AGENT),
             (AppMode::Yolo, "yolo", palette::MODE_YOLO),
             (AppMode::Plan, "plan", palette::MODE_PLAN),
+            (AppMode::Novel, "novel", palette::MODE_NOVEL),
         ];
         for (mode, expected_label, expected_color) in cases {
             app.mode = mode;

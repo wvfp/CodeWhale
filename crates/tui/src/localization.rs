@@ -284,6 +284,7 @@ pub enum MessageId {
     CmdModelDescription,
     CmdModelsDescription,
     CmdNetworkDescription,
+    CmdNovelDescription,
     CmdNoteDescription,
     CmdThemeDescription,
     CmdProviderDescription,
@@ -1143,6 +1144,7 @@ fn english(id: MessageId) -> &'static str {
         MessageId::CmdModelDescription => "Switch or view current model",
         MessageId::CmdModelsDescription => "List available models from API",
         MessageId::CmdNetworkDescription => "Manage network allow and deny rules",
+        MessageId::CmdNovelDescription => "Open novel TUI views: tree / characters / progress",
         MessageId::CmdNoteDescription => "Add, list, edit, or remove workspace notes",
         MessageId::CmdThemeDescription => "Switch theme or open the theme picker",
         MessageId::CmdProviderDescription => {
@@ -1615,6 +1617,7 @@ fn vietnamese(id: MessageId) -> Option<&'static str> {
         MessageId::CmdModelDescription => "Chuyển đổi hoặc xem mô hình AI hiện tại",
         MessageId::CmdModelsDescription => "Liệt kê các mô hình khả dụng từ API",
         MessageId::CmdNetworkDescription => "Quản lý các quy tắc cho phép và từ chối mạng",
+        MessageId::CmdNovelDescription => "Mở chế độ xem TUI của tiểu thuyết: tree / characters / progress",
         MessageId::CmdNoteDescription => {
             "Thêm, liệt kê, sửa hoặc xóa ghi chú trong không gian làm việc"
         }
@@ -2164,6 +2167,7 @@ fn japanese(id: MessageId) -> Option<&'static str> {
         MessageId::CmdModelDescription => "現在のモデルを切り替え・確認",
         MessageId::CmdModelsDescription => "API から利用可能なモデルを一覧表示",
         MessageId::CmdNetworkDescription => "ネットワーク許可・拒否ルールを管理",
+        MessageId::CmdNovelDescription => "ノベル TUI ビューを開く: tree / characters / progress",
         MessageId::CmdNoteDescription => "ワークスペースノートの追加、一覧、編集、削除",
         MessageId::CmdThemeDescription => {
             "テーマを切り替え（ダーク/ライト/グレースケール/システム）"
@@ -2608,6 +2612,7 @@ fn chinese_simplified(id: MessageId) -> Option<&'static str> {
         MessageId::CmdModelDescription => "切换或查看当前模型",
         MessageId::CmdModelsDescription => "列出 API 中可用的模型",
         MessageId::CmdNetworkDescription => "管理网络允许和拒绝规则",
+        MessageId::CmdNovelDescription => "打开小说 TUI 视图：tree / characters / progress",
         MessageId::CmdNoteDescription => "添加、列出、编辑或删除工作区笔记",
         MessageId::CmdThemeDescription => "切换主题：深色、浅色、灰度或系统",
         MessageId::CmdProviderDescription => {
@@ -3030,6 +3035,7 @@ fn portuguese_brazil(id: MessageId) -> Option<&'static str> {
         MessageId::CmdModelDescription => "Trocar ou exibir o modelo atual",
         MessageId::CmdModelsDescription => "Listar os modelos disponíveis pela API",
         MessageId::CmdNetworkDescription => "Gerenciar regras de rede permitidas e bloqueadas",
+        MessageId::CmdNovelDescription => "Abrir as visões TUI do romance: tree / characters / progress",
         MessageId::CmdNoteDescription => "Adicionar, listar, editar ou remover notas do workspace",
         MessageId::CmdThemeDescription => "Alternar tema: escuro, claro, tons de cinza ou sistema",
         MessageId::CmdProviderDescription => {
@@ -3518,6 +3524,7 @@ fn spanish_latin_america(id: MessageId) -> Option<&'static str> {
         MessageId::CmdModelDescription => "Cambiar o mostrar el modelo actual",
         MessageId::CmdModelsDescription => "Listar los modelos disponibles por la API",
         MessageId::CmdNetworkDescription => "Gestionar reglas de red permitidas y bloqueadas",
+        MessageId::CmdNovelDescription => "Abrir las vistas TUI de la novela: tree / characters / progress",
         MessageId::CmdNoteDescription => {
             "Agregar nota al archivo persistente (.codewhale/notes.md)"
         }

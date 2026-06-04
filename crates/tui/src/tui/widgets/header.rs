@@ -181,6 +181,7 @@ impl<'a> HeaderWidget<'a> {
             AppMode::Agent => palette::MODE_AGENT,
             AppMode::Yolo => palette::MODE_YOLO,
             AppMode::Plan => palette::MODE_PLAN,
+            AppMode::Novel => palette::MODE_NOVEL,
         }
     }
 
@@ -189,6 +190,7 @@ impl<'a> HeaderWidget<'a> {
             AppMode::Agent => "Agent",
             AppMode::Yolo => "Yolo",
             AppMode::Plan => "Plan",
+            AppMode::Novel => "Novel",
         }
     }
 
@@ -631,6 +633,29 @@ mod tests {
         assert!(rendered.contains("deepseek-v4-pro"));
         assert!(!rendered.contains("Plan"));
         assert!(!rendered.contains("Yolo"));
+    }
+
+    #[test]
+    fn novel_mode_renders_with_distinct_label() {
+        // The novel badge should appear in the header so users see at a glance
+        // that they switched to creative-writing mode. We assert presence of
+        // the label and the absence of the other engineering-mode names so a
+        // future copy-paste in `mode_name` cannot silently drop Novel.
+        let rendered = render_header(
+            HeaderData::new(
+                AppMode::Novel,
+                "deepseek-v4-pro",
+                "codewhale-tui",
+                false,
+                palette::DEEPSEEK_INK,
+            ),
+            120,
+        );
+
+        assert!(rendered.contains("Novel"), "Novel badge missing: {rendered:?}");
+        assert!(!rendered.contains("Agent"), "should not render other modes: {rendered:?}");
+        assert!(!rendered.contains("Yolo"), "should not render other modes: {rendered:?}");
+        assert!(!rendered.contains("Plan"), "should not render other modes: {rendered:?}");
     }
 
     #[test]

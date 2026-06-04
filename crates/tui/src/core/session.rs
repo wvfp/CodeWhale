@@ -8,7 +8,57 @@ use crate::project_context::{ProjectContext, load_project_context_with_parents};
 use crate::prompt_zones::FrozenPrefix;
 use crate::tui::approval::ApprovalMode;
 use crate::working_set::WorkingSet;
+use novel::model::graph::NarrativeGraph;
+use novel::model::project::NovelProject;
+use novel::model::stage::{CreationStage, StageTransitionError};
 use std::path::PathBuf;
+use thiserror::Error;
+
+/// Error returned when a session fails to transition between novel creation
+/// stages. Wraps the underlying [`StageTransitionError`] from the novel crate.
+#[derive(Debug, Error)]
+#[error("{0}")]
+#[allow(dead_code)]
+pub struct NovelStageError(pub String);
+
+#[allow(dead_code)]
+impl From<StageTransitionError> for NovelStageError {
+    fn from(err: StageTransitionError) -> Self {
+        NovelStageError(err.to_string())
+    }
+}
+
+/// Novel-specific session state. Tracks the current creation stage, the
+/// active project, narrative graph, and metadata used by the TUI novel mode.
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct NovelSessionState {
+    pub stage: CreationStage,
+    pub project: Option<NovelProject>,
+    pub narrative_graph: NarrativeGraph,
+    pub active_chapter: Option<uuid::Uuid>,
+    /// Serialized genre name (the underlying `Genre` enum lives in the novel
+    /// crate; we store its display form here to avoid coupling the TUI to the
+    /// enum's variants).
+    pub genre: Option<String>,
+    pub last_modified: chrono::DateTime<chrono::Utc>,
+}
+
+impl Default for NovelSessionState {
+    fn default() -> Self {
+        Self {
+            stage: CreationStage::Concept,
+            project: None,
+            narrative_graph: NarrativeGraph {
+                nodes: Vec::new(),
+                arcs: Vec::new(),
+            },
+            active_chapter: None,
+            genre: None,
+            last_modified: chrono::Utc::now(),
+        }
+    }
+}
 
 /// Session state for the engine.
 #[derive(Debug, Clone)]
@@ -82,6 +132,10 @@ pub struct Session {
     /// request of the session; verified against the current system+tool
     /// state before every subsequent request. None until the first turn.
     pub frozen_prefix: Option<FrozenPrefix>,
+
+    /// Novel creation state. Always present so TUI novel mode can be enabled
+    /// at any time without restructuring the surrounding session.
+    pub novel_state: NovelSessionState,
 }
 
 /// Cumulative usage statistics for a session.
@@ -155,6 +209,7 @@ impl Session {
             working_set: WorkingSet::default(),
             prefix_stability: None,
             frozen_prefix: None,
+            novel_state: NovelSessionState::default(),
         }
     }
 
@@ -167,6 +222,27 @@ impl Session {
     pub fn rebuild_working_set(&mut self) {
         self.working_set
             .rebuild_from_messages(&self.messages, &self.workspace);
+    }
+
+    /// Transition the novel creation stage, validating the move against
+    /// [`CreationStage::can_transition_to`]. Updates `last_modified` on
+    /// success.
+    #[allow(dead_code)]
+    pub fn transition_creation_stage(
+        &mut self,
+        new_stage: CreationStage,
+    ) -> Result<(), NovelStageError> {
+        self.novel_state.stage = self.novel_state.stage.try_transition(new_stage)?;
+        self.novel_state.last_modified = chrono::Utc::now();
+        Ok(())
+    }
+
+    /// Whether the session is currently operating in novel mode. The
+    /// `AppMode` flag is the source of truth externally; this helper exists
+    /// for callers that only have a `Session` reference.
+    #[allow(dead_code)]
+    pub fn is_novel_mode(&self) -> bool {
+        self.novel_state.stage != CreationStage::Concept || self.novel_state.project.is_some()
     }
 }
 

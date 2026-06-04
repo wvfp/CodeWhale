@@ -14,8 +14,15 @@ use crate::tui::approval::{ElevationOption, ReviewDecision};
 use crate::tui::history::{HistoryCell, SubAgentCell, summarize_tool_output};
 use crate::tui::widgets::agent_card::AgentLifecycle;
 
+pub mod help;
 pub mod mode_picker;
+pub mod novel_views;
 pub mod status_picker;
+
+#[allow(unused_imports)]
+pub use help::HelpView;
+#[allow(unused_imports)]
+pub use novel_views::{ChapterProgressView, CharacterListView, NarrativeTreeView};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModalKind {
@@ -39,6 +46,12 @@ pub enum ModalKind {
     ThemePicker,
     ContextMenu,
     ShellControl,
+    /// 叙事树视图（`/novel tree`）。
+    NovelTree,
+    /// 人物列表视图（`/novel characters`）。
+    NovelCharacters,
+    /// 章节进度视图（`/novel progress`）。
+    NovelProgress,
 }
 
 #[derive(Debug, Clone)]
@@ -204,6 +217,19 @@ pub enum ViewEvent {
     CopyToClipboard {
         text: String,
         label: String,
+    },
+    /// 小说 TUI：用户选择了一个叙事节点（弧线 / 章节），由命令面板透传给
+    /// 上层处理（如跳到对应章节、展开节点详情等）。
+    NovelNodeSelected {
+        node_id: uuid::Uuid,
+    },
+    /// 小说 TUI：用户在人物列表里选中了一个角色。
+    NovelCharacterSelected {
+        character_name: String,
+    },
+    /// 小说 TUI：用户在章节进度里选中了一章，要求「定位到该章」。
+    NovelChapterSelected {
+        chapter_number: u32,
     },
 }
 
@@ -1623,10 +1649,6 @@ impl ModalView for ConfigView {
             .render(inner, buf);
     }
 }
-
-pub mod help;
-
-pub use help::HelpView;
 
 pub struct SubAgentsView {
     agents: Vec<SubAgentResult>,

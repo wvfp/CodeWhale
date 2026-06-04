@@ -32,6 +32,7 @@ env/
 .venv/
 *.egg-info/
 dist/
+.trae/
 
 # Logs
 *.log

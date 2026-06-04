@@ -8,6 +8,7 @@ members = [
     "crates/execpolicy",
     "crates/hooks",
     "crates/mcp",
+    "crates/novel",
     "crates/protocol",
     "crates/release",
     "crates/secrets",
@@ -51,4 +52,6 @@ tower-http = { version = "0.6", features = ["cors"] }
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-uuid = { version = "1.11", features = ["v4"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
+
+[workspace.lints]

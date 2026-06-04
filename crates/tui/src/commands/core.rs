@@ -447,6 +447,14 @@ pub fn home_dashboard(app: &mut App) -> CommandResult {
             let _ = writeln!(stats, "{}", tr(locale, MessageId::HomePlanModeTip));
             let _ = writeln!(stats, "{}", tr(locale, MessageId::HomePlanModeChecklistTip));
         }
+        AppMode::Novel => {
+            // Novel mode is a creative-writing workspace. Reuse the Agent
+            // approval tip so the user knows file writes still require
+            // approval; the dedicated novel guidance lives in the system
+            // prompt and in the mode picker hint, not in the home summary.
+            let _ = writeln!(stats, "{}", tr(locale, MessageId::HomeAgentModeTip));
+            let _ = writeln!(stats, "{}", tr(locale, MessageId::HomeAgentModeReviewTip));
+        }
     }
 
     CommandResult::message(stats)
@@ -1035,7 +1043,7 @@ mod tests {
 
     #[test]
     fn test_home_dashboard_mode_tips_for_each_mode() {
-        let modes = [AppMode::Agent, AppMode::Yolo, AppMode::Plan];
+        let modes = [AppMode::Agent, AppMode::Yolo, AppMode::Plan, AppMode::Novel];
         for mode in modes {
             let mut app = create_test_app();
             app.mode = mode;
