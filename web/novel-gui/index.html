@@ -1,0 +1,1728 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NovelWhale — AI 网文创作工作台</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ========== 设计令牌 ========== */
+:root {
+  /* 墨韵暗黑基底 */
+  --ink-950: #0B0C0F;
+  --ink-900: #111318;
+  --ink-850: #15171D;
+  --ink-800: #1A1D25;
+  --ink-750: #1E222C;
+  --ink-700: #242832;
+  --ink-600: #2D323E;
+  --ink-500: #3A4050;
+  --ink-400: #5A6278;
+  --ink-300: #8A93A8;
+  --ink-200: #B4BCC8;
+  --ink-100: #D8DEE8;
+  --ink-50:  #F0F2F5;
+
+  /* 朱砂红系 */
+  --cinnabar: #C23A2B;
+  --cinnabar-light: #D94F3F;
+  --cinnabar-glow: rgba(194,58,43,0.25);
+  --cinnabar-faint: rgba(194,58,43,0.08);
+
+  /* 青绿系 */
+  --verdigris: #2E8B7A;
+  --verdigris-light: #3AAE9A;
+  --verdigris-glow: rgba(46,139,122,0.25);
+  --verdigris-faint: rgba(46,139,122,0.08);
+
+  /* 金系 */
+  --gold: #C9A84C;
+  --gold-light: #DDBB5E;
+  --gold-glow: rgba(201,168,76,0.25);
+  --gold-faint: rgba(201,168,76,0.08);
+
+  /* 语义色 */
+  --accent-primary: var(--cinnabar);
+  --accent-secondary: var(--verdigris);
+  --accent-tertiary: var(--gold);
+  --text-primary: var(--ink-100);
+  --text-secondary: var(--ink-300);
+  --text-muted: var(--ink-400);
+  --bg-base: var(--ink-950);
+  --bg-surface: var(--ink-900);
+  --bg-elevated: var(--ink-850);
+  --bg-hover: var(--ink-800);
+  --border-subtle: var(--ink-700);
+  --border-default: var(--ink-600);
+
+  /* 排版 */
+  --font-serif: 'Noto Serif SC', 'Songti SC', serif;
+  --font-sans: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+  /* 间距 */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
+  --space-4: 16px; --space-5: 20px; --space-6: 24px;
+  --space-8: 32px; --space-10: 40px; --space-12: 48px;
+
+  /* 圆角 */
+  --radius-sm: 4px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+  --shadow-glow-cinnabar: 0 0 20px var(--cinnabar-glow);
+  --shadow-glow-verdigris: 0 0 20px var(--verdigris-glow);
+  --shadow-glow-gold: 0 0 20px var(--gold-glow);
+
+  /* 动画 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ========== 全局重置 ========== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  line-height: 1.6;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ========== 布局骨架 ========== */
+.app-shell {
+  display: grid;
+  grid-template-columns: 56px 260px 1fr;
+  grid-template-rows: 48px 1fr 32px;
+  grid-template-areas:
+    "rail sidebar header"
+    "rail sidebar main"
+    "rail sidebar footer";
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ========== 左侧导航栏 ========== */
+.nav-rail {
+  grid-area: rail;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-4) 0;
+  gap: var(--space-2);
+}
+.nav-rail .logo {
+  width: 32px; height: 32px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--cinnabar), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-serif);
+  font-weight: 700; font-size: 14px;
+  color: white; margin-bottom: var(--space-4);
+  box-shadow: var(--shadow-glow-cinnabar);
+}
+.nav-rail .nav-item {
+  width: 40px; height: 40px;
+  border-radius: var(--radius-md);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  position: relative;
+}
+.nav-rail .nav-item:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.nav-rail .nav-item.active { background: var(--cinnabar-faint); color: var(--cinnabar-light); }
+.nav-rail .nav-item.active::before {
+  content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 20px; background: var(--cinnabar); border-radius: 0 2px 2px 0;
+}
+.nav-rail .nav-item svg { width: 20px; height: 20px; }
+.nav-rail .divider {
+  width: 24px; height: 1px; background: var(--border-subtle); margin: var(--space-2) 0;
+}
+.nav-rail .bottom-group { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* ========== 侧边栏 ========== */
+.sidebar {
+  grid-area: sidebar;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.sidebar-title {
+  font-family: var(--font-serif);
+  font-size: 15px; font-weight: 600;
+  color: var(--text-primary);
+}
+.sidebar-subtitle {
+  font-size: 11px; color: var(--text-muted);
+  margin-top: 2px;
+}
+.sidebar-actions { display: flex; gap: var(--space-2); }
+.sidebar-actions button {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.sidebar-actions button:hover { background: var(--bg-hover); color: var(--text-secondary); border-color: var(--border-default); }
+
+/* 侧边栏树形结构 */
+.tree-list { flex: 1; overflow-y: auto; padding: var(--space-3) 0; }
+.tree-list::-webkit-scrollbar { width: 4px; }
+.tree-list::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 2px; }
+.tree-item {
+  display: flex; align-items: center;
+  padding: 6px var(--space-4) 6px calc(var(--space-4) + var(--depth, 0) * 16px);
+  cursor: pointer;
+  transition: background 0.15s;
+  border-radius: 0;
+  gap: var(--space-2);
+}
+.tree-item:hover { background: var(--bg-hover); }
+.tree-item.active { background: var(--cinnabar-faint); }
+.tree-item.active .tree-label { color: var(--cinnabar-light); }
+.tree-item .tree-icon { width: 16px; height: 16px; color: var(--text-muted); flex-shrink: 0; }
+.tree-item.active .tree-icon { color: var(--cinnabar-light); }
+.tree-item .tree-label { font-size: 13px; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-item .tree-badge {
+  margin-left: auto; font-size: 10px; padding: 1px 6px;
+  border-radius: 10px; background: var(--ink-700);
+  color: var(--text-muted); flex-shrink: 0;
+}
+.tree-item .tree-badge.draft { background: var(--verdigris-faint); color: var(--verdigris-light); }
+.tree-item .tree-badge.hook { background: var(--gold-faint); color: var(--gold-light); }
+.tree-section {
+  padding: var(--space-3) var(--space-4) var(--space-1);
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--text-muted);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+
+/* ========== 顶部栏 ========== */
+.top-header {
+  grid-area: header;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--space-5);
+}
+.breadcrumb {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: 13px; color: var(--text-secondary);
+}
+.breadcrumb .sep { color: var(--text-muted); }
+.breadcrumb .current { color: var(--text-primary); font-weight: 500; }
+.header-actions { display: flex; align-items: center; gap: var(--space-3); }
+.stage-pill {
+  display: flex; align-items: center; gap: var(--space-3);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: 4px var(--space-3);
+}
+.stage-step {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text-muted);
+  position: relative;
+}
+.stage-step::after {
+  content: ''; width: 12px; height: 1px; background: var(--ink-600);
+  margin-left: 6px;
+}
+.stage-step:last-child::after { display: none; }
+.stage-step.done { color: var(--verdigris-light); }
+.stage-step.done .step-dot { background: var(--verdigris); }
+.stage-step.active { color: var(--gold-light); }
+.stage-step.active .step-dot { background: var(--gold); box-shadow: var(--shadow-glow-gold); }
+.step-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink-600); }
+.word-count {
+  font-family: var(--font-mono);
+  font-size: 12px; color: var(--text-muted);
+  background: var(--bg-elevated);
+  padding: 4px 10px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ========== 主内容区 ========== */
+.main-content {
+  grid-area: main;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ========== 视图切换系统 ========== */
+.view { display: none; height: 100%; overflow: hidden; }
+.view.active { display: flex; }
+
+/* ========== 仪表盘视图 ========== */
+.dashboard-view { flex-direction: column; padding: var(--space-6); gap: var(--space-6); overflow-y: auto; }
+.dashboard-view::-webkit-scrollbar { width: 6px; }
+.dashboard-view::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 3px; }
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-5);
+}
+.metric-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  transition: all 0.2s var(--ease-out);
+}
+.metric-card:hover { border-color: var(--border-default); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.metric-card .metric-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: var(--space-2); }
+.metric-card .metric-value {
+  font-family: var(--font-mono);
+  font-size: 28px; font-weight: 500; color: var(--text-primary);
+}
+.metric-card .metric-delta {
+  font-size: 12px; margin-top: var(--space-2);
+  display: flex; align-items: center; gap: 4px;
+}
+.metric-delta.up { color: var(--verdigris-light); }
+.metric-delta.down { color: var(--cinnabar-light); }
+.metric-card .metric-bar {
+  height: 3px; background: var(--ink-700); border-radius: 2px; margin-top: var(--space-3); overflow: hidden;
+}
+.metric-bar .metric-fill { height: 100%; border-radius: 2px; transition: width 1s var(--ease-out); }
+
+.dashboard-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-5);
+}
+.panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.panel-header {
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.panel-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.panel-body { padding: var(--space-4) var(--space-5); }
+
+/* 情绪曲线 */
+.emotion-chart { height: 160px; position: relative; }
+.emotion-chart svg { width: 100%; height: 100%; }
+.emotion-chart .chart-line { fill: none; stroke: var(--cinnabar); stroke-width: 2; }
+.emotion-chart .chart-area { fill: var(--cinnabar-faint); }
+.emotion-chart .chart-dot { fill: var(--cinnabar); r: 4; }
+.emotion-chart .chart-grid { stroke: var(--ink-700); stroke-width: 1; stroke-dasharray: 4 4; }
+.emotion-chart .chart-label { font-size: 10px; fill: var(--text-muted); }
+
+/* 章节列表 */
+.chapter-list { display: flex; flex-direction: column; gap: var(--space-2); }
+.chapter-row {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  transition: all 0.15s;
+}
+.chapter-row:hover { background: var(--bg-hover); }
+.chapter-row .ch-num { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); width: 40px; }
+.chapter-row .ch-title { flex: 1; font-size: 13px; color: var(--text-secondary); }
+.chapter-row .ch-status {
+  font-size: 10px; padding: 2px 8px; border-radius: 10px;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.ch-status.draft { background: var(--verdigris-faint); color: var(--verdigris-light); }
+.ch-status.outlined { background: var(--gold-faint); color: var(--gold-light); }
+.ch-status.planned { background: var(--ink-700); color: var(--text-muted); }
+.ch-status.published { background: var(--cinnabar-faint); color: var(--cinnabar-light); }
+.chapter-row .ch-words { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+
+/* ========== 编辑器+AI 对话视图 ========== */
+.editor-view { flex-direction: row; }
+.editor-pane {
+  flex: 1; display: flex; flex-direction: column;
+  border-right: 1px solid var(--border-subtle);
+}
+.editor-toolbar {
+  height: 44px; background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; padding: 0 var(--space-4);
+  gap: var(--space-2);
+}
+.editor-toolbar button {
+  height: 30px; padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: all 0.15s;
+}
+.editor-toolbar button:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.editor-toolbar button.primary { background: var(--cinnabar-faint); border-color: var(--cinnabar); color: var(--cinnabar-light); }
+.editor-toolbar button.primary:hover { background: var(--cinnabar); color: white; }
+.editor-toolbar .toolbar-spacer { flex: 1; }
+.editor-textarea {
+  flex: 1; padding: var(--space-6);
+  background: var(--bg-base);
+  border: none; outline: none;
+  font-family: var(--font-serif);
+  font-size: 16px; line-height: 2;
+  color: var(--text-primary);
+  resize: none;
+  overflow-y: auto;
+}
+.editor-textarea::placeholder { color: var(--ink-500); }
+.editor-textarea::-webkit-scrollbar { width: 6px; }
+.editor-textarea::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 3px; }
+
+/* AI 对话面板 */
+.ai-panel {
+  width: 380px; display: flex; flex-direction: column;
+  background: var(--bg-surface);
+}
+.ai-header {
+  height: 44px; border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; padding: 0 var(--space-4);
+  gap: var(--space-2);
+}
+.ai-header .ai-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--verdigris), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; color: white; font-weight: 600;
+}
+.ai-header .ai-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.ai-header .ai-status { font-size: 11px; color: var(--verdigris-light); margin-left: auto; }
+.ai-messages { flex: 1; overflow-y: auto; padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.ai-messages::-webkit-scrollbar { width: 4px; }
+.ai-messages::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 2px; }
+.message { display: flex; gap: var(--space-3); }
+.message.user { flex-direction: row-reverse; }
+.message .msg-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+}
+.message.ai .msg-avatar { background: var(--verdigris-faint); color: var(--verdigris-light); }
+.message.user .msg-avatar { background: var(--cinnabar-faint); color: var(--cinnabar-light); }
+.message .msg-bubble {
+  max-width: 280px; padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  font-size: 13px; line-height: 1.7;
+}
+.message.ai .msg-bubble { background: var(--bg-elevated); color: var(--text-secondary); border: 1px solid var(--border-subtle); }
+.message.user .msg-bubble { background: var(--cinnabar-faint); color: var(--text-primary); border: 1px solid var(--cinnabar-faint); }
+.message .msg-time { font-size: 10px; color: var(--text-muted); margin-top: 4px; }
+.ai-input-area {
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+.ai-input-wrap {
+  display: flex; align-items: flex-end; gap: var(--space-2);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2) var(--space-3);
+}
+.ai-input-wrap textarea {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: var(--text-primary); font-size: 13px; line-height: 1.5;
+  resize: none; min-height: 20px; max-height: 120px;
+  font-family: var(--font-sans);
+}
+.ai-input-wrap textarea::placeholder { color: var(--ink-500); }
+.ai-input-wrap button {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: none; background: var(--cinnabar);
+  color: white; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.ai-input-wrap button:hover { background: var(--cinnabar-light); box-shadow: var(--shadow-glow-cinnabar); }
+
+/* ========== 叙事树视图 ========== */
+.narrative-view { flex-direction: column; padding: var(--space-6); overflow-y: auto; }
+.narrative-view::-webkit-scrollbar { width: 6px; }
+.narrative-view::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 3px; }
+.narrative-toolbar {
+  display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-6);
+}
+.narrative-toolbar h2 { font-family: var(--font-serif); font-size: 18px; font-weight: 600; }
+.filter-pills { display: flex; gap: var(--space-2); }
+.filter-pill {
+  padding: 4px 12px; border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+  background: transparent; color: var(--text-muted);
+  font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.filter-pill:hover { background: var(--bg-hover); }
+.filter-pill.active { background: var(--cinnabar-faint); border-color: var(--cinnabar); color: var(--cinnabar-light); }
+.narrative-canvas { flex: 1; position: relative; min-height: 500px; }
+.narrative-arc {
+  margin-bottom: var(--space-6);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.arc-header {
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center; gap: var(--space-3);
+}
+.arc-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.arc-type {
+  font-size: 10px; padding: 2px 8px; border-radius: 10px;
+  background: var(--gold-faint); color: var(--gold-light); text-transform: uppercase;
+}
+.arc-nodes { display: flex; padding: var(--space-5); gap: var(--space-3); overflow-x: auto; }
+.arc-nodes::-webkit-scrollbar { height: 4px; }
+.arc-nodes::-webkit-scrollbar-thumb { background: var(--ink-600); border-radius: 2px; }
+.node-card {
+  min-width: 180px; max-width: 220px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  position: relative;
+}
+.node-card:hover { border-color: var(--border-default); transform: translateY(-2px); box-shadow: var(--shadow-md); }
+.node-card.selected { border-color: var(--cinnabar); box-shadow: var(--shadow-glow-cinnabar); }
+.node-card .node-type {
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em;
+  margin-bottom: var(--space-2);
+}
+.node-type.hook { color: var(--cinnabar-light); }
+.node-type.setup { color: var(--text-muted); }
+.node-type.conflict { color: var(--gold-light); }
+.node-type.climax { color: var(--cinnabar-light); }
+.node-type.twist { color: var(--verdigris-light); }
+.node-type.payoff { color: var(--gold-light); }
+.node-card .node-title { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: var(--space-2); }
+.node-card .node-meta { font-size: 11px; color: var(--text-muted); }
+.node-card .node-emotion {
+  height: 3px; border-radius: 2px; margin-top: var(--space-3);
+  background: linear-gradient(90deg, var(--verdigris), var(--gold), var(--cinnabar));
+}
+.node-connector {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-600); font-size: 14px; align-self: center;
+}
+
+/* ========== 角色&世界观视图 ========== */
+.characters-view { flex-direction: row; padding: var(--space-6); gap: var(--space-6); overflow-y: auto; }
+.characters-sidebar { width: 220px; flex-shrink: 0; }
+.characters-sidebar .char-list { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-4); }
+.char-list-item {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  cursor: pointer; transition: all 0.15s;
+}
+.char-list-item:hover { background: var(--bg-hover); }
+.char-list-item.active { border-color: var(--cinnabar); background: var(--cinnabar-faint); }
+.char-list-item .char-avatar {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--ink-700), var(--ink-600));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-serif); font-size: 14px; color: var(--text-secondary);
+}
+.char-list-item .char-info { flex: 1; }
+.char-list-item .char-name { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.char-list-item .char-role { font-size: 11px; color: var(--text-muted); }
+.char-list-item .char-status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.char-status-dot.alive { background: var(--verdigris); }
+.char-status-dot.dead { background: var(--cinnabar); }
+.char-detail { flex: 1; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: var(--space-6); }
+.char-detail-header { display: flex; align-items: center; gap: var(--space-4); margin-bottom: var(--space-6); }
+.char-detail-avatar {
+  width: 64px; height: 64px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--cinnabar), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-serif); font-size: 24px; color: white;
+}
+.char-detail-name { font-family: var(--font-serif); font-size: 20px; font-weight: 600; }
+.char-detail-role { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.char-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-5);
+}
+.char-detail-section .section-label {
+  font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: var(--space-2);
+}
+.char-detail-section .section-value { font-size: 14px; color: var(--text-secondary); line-height: 1.7; }
+
+/* ========== 一致性检查视图 ========== */
+.consistency-view { flex-direction: column; padding: var(--space-6); overflow-y: auto; }
+.consistency-score {
+  display: flex; align-items: center; gap: var(--space-6);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); padding: var(--space-6);
+  margin-bottom: var(--space-6);
+}
+.score-ring {
+  width: 100px; height: 100px; position: relative;
+}
+.score-ring svg { transform: rotate(-90deg); }
+.score-ring .score-text {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  font-family: var(--font-mono); font-size: 24px; font-weight: 600; color: var(--text-primary);
+}
+.score-details { flex: 1; }
+.score-details h3 { font-size: 16px; font-weight: 600; margin-bottom: var(--space-2); }
+.score-details p { font-size: 13px; color: var(--text-muted); }
+.issue-list { display: flex; flex-direction: column; gap: var(--space-3); }
+.issue-item {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-4); border-radius: var(--radius-md);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+}
+.issue-item.critical { border-left: 3px solid var(--cinnabar); }
+.issue-item.warning { border-left: 3px solid var(--gold); }
+.issue-item.info { border-left: 3px solid var(--verdigris); }
+.issue-icon { width: 20px; height: 20px; flex-shrink: 0; margin-top: 2px; }
+.issue-content { flex: 1; }
+.issue-title { font-size: 13px; font-weight: 500; color: var(--text-primary); margin-bottom: 4px; }
+.issue-desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+.issue-location { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+/* ========== 分支探索视图 ========== */
+.branch-view { flex-direction: column; padding: var(--space-6); overflow-y: auto; }
+.branch-tree { display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-4); }
+.branch-node {
+  display: flex; align-items: center; gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  position: relative;
+}
+.branch-node.current { border-color: var(--cinnabar); background: var(--cinnabar-faint); }
+.branch-node .branch-line {
+  position: absolute; left: 24px; top: -20px; width: 2px; height: 20px; background: var(--ink-600);
+}
+.branch-node .branch-connector {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--ink-600); background: var(--bg-base);
+  flex-shrink: 0;
+}
+.branch-node.current .branch-connector { border-color: var(--cinnabar); background: var(--cinnabar); }
+.branch-node .branch-content { flex: 1; }
+.branch-node .branch-title { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.branch-node .branch-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.branch-node .branch-actions { display: flex; gap: var(--space-2); }
+.branch-node .branch-actions button {
+  padding: 4px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle); background: transparent;
+  color: var(--text-muted); font-size: 12px; cursor: pointer; transition: all 0.15s;
+}
+.branch-node .branch-actions button:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.branch-node .branch-actions button.primary { background: var(--cinnabar); border-color: var(--cinnabar); color: white; }
+.branch-node .branch-actions button.primary:hover { background: var(--cinnabar-light); }
+
+/* ========== 读者模拟视图 ========== */
+.reader-view { flex-direction: column; padding: var(--space-6); overflow-y: auto; }
+.reader-profile {
+  display: flex; align-items: center; gap: var(--space-4);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); padding: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+.reader-avatar {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--verdigris), var(--gold));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.reader-info { flex: 1; }
+.reader-info h3 { font-size: 16px; font-weight: 600; }
+.reader-info p { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
+.reader-tags { display: flex; gap: var(--space-2); margin-top: var(--space-2); }
+.reader-tag {
+  font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  background: var(--ink-700); color: var(--text-muted);
+}
+.reader-diary { display: flex; flex-direction: column; gap: var(--space-3); }
+.diary-entry {
+  padding: var(--space-4); border-radius: var(--radius-md);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+}
+.diary-entry .diary-chapter { font-size: 12px; color: var(--text-muted); margin-bottom: var(--space-2); }
+.diary-entry .diary-text { font-size: 14px; color: var(--text-secondary); line-height: 1.7; font-style: italic; }
+.diary-entry .diary-emotion {
+  display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3);
+}
+.emotion-bar { flex: 1; height: 4px; background: var(--ink-700); border-radius: 2px; overflow: hidden; }
+.emotion-bar .emotion-fill { height: 100%; border-radius: 2px; }
+.emotion-label { font-size: 11px; color: var(--text-muted); }
+
+/* ========== 模态弹窗 ========== */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center;
+}
+.modal-overlay.active { display: flex; }
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  max-width: 520px; width: 90%;
+  max-height: 80vh; overflow: hidden;
+  display: flex; flex-direction: column;
+  animation: modalIn 0.3s var(--ease-out);
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-header {
+  padding: var(--space-5) var(--space-6) var(--space-3);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-header h3 { font-size: 16px; font-weight: 600; }
+.modal-header .modal-close {
+  width: 28px; height: 28px; border-radius: var(--radius-sm);
+  border: none; background: transparent; color: var(--text-muted);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.modal-header .modal-close:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.modal-body { padding: var(--space-3) var(--space-6); overflow-y: auto; flex: 1; }
+.modal-footer {
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+  display: flex; justify-content: flex-end; gap: var(--space-3);
+}
+
+/* 选项弹窗 */
+.question-card {
+  margin-bottom: var(--space-5);
+}
+.question-card .question-text {
+  font-size: 14px; font-weight: 500; color: var(--text-primary);
+  margin-bottom: var(--space-4);
+}
+.question-options { display: flex; flex-direction: column; gap: var(--space-2); }
+.question-option {
+  display: flex; align-items: flex-start; gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  cursor: pointer; transition: all 0.15s;
+}
+.question-option:hover { border-color: var(--border-default); background: var(--bg-hover); }
+.question-option.selected { border-color: var(--cinnabar); background: var(--cinnabar-faint); }
+.question-option .opt-num {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--ink-700); color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 12px; flex-shrink: 0;
+}
+.question-option.selected .opt-num { background: var(--cinnabar); color: white; }
+.question-option .opt-content { flex: 1; }
+.question-option .opt-label { font-size: 13px; font-weight: 500; color: var(--text-primary); }
+.question-option .opt-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+/* 题材选择弹窗 */
+.genre-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-3);
+}
+.genre-card {
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+  cursor: pointer; transition: all 0.2s var(--ease-out);
+  text-align: center;
+}
+.genre-card:hover { border-color: var(--border-default); transform: translateY(-2px); }
+.genre-card.selected { border-color: var(--cinnabar); background: var(--cinnabar-faint); }
+.genre-card .genre-icon { font-size: 28px; margin-bottom: var(--space-2); }
+.genre-card .genre-name { font-size: 14px; font-weight: 500; color: var(--text-primary); }
+.genre-card .genre-desc { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+/* ========== 底部状态栏 ========== */
+.status-bar {
+  grid-area: footer;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 var(--space-5);
+  font-size: 11px; color: var(--text-muted);
+}
+.status-left, .status-right { display: flex; align-items: center; gap: var(--space-4); }
+.status-item { display: flex; align-items: center; gap: 6px; }
+.status-dot { width: 6px; height: 6px; border-radius: 50%; }
+.status-dot.online { background: var(--verdigris); box-shadow: 0 0 4px var(--verdigris-glow); }
+.status-dot.syncing { background: var(--gold); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ========== 按钮组件 ========== */
+.btn {
+  padding: 8px 16px; border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: transparent; color: var(--text-secondary);
+  font-size: 13px; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: all 0.15s;
+}
+.btn:hover { background: var(--bg-hover); }
+.btn-primary { background: var(--cinnabar); border-color: var(--cinnabar); color: white; }
+.btn-primary:hover { background: var(--cinnabar-light); box-shadow: var(--shadow-glow-cinnabar); }
+.btn-secondary { background: var(--verdigris-faint); border-color: var(--verdigris); color: var(--verdigris-light); }
+.btn-secondary:hover { background: var(--verdigris); color: white; }
+
+/* ========== 工具提示 ========== */
+.tooltip {
+  position: relative;
+}
+.tooltip::after {
+  content: attr(data-tip);
+  position: absolute; left: 50%; bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  padding: 4px 10px; border-radius: var(--radius-sm);
+  background: var(--ink-800); color: var(--text-secondary);
+  font-size: 11px; white-space: nowrap;
+  opacity: 0; pointer-events: none; transition: opacity 0.15s;
+}
+.tooltip:hover::after { opacity: 1; }
+
+/* ========== 响应式 ========== */
+@media (max-width: 1200px) {
+  .app-shell { grid-template-columns: 56px 200px 1fr; }
+  .ai-panel { width: 320px; }
+}
+@media (max-width: 900px) {
+  .app-shell { grid-template-columns: 48px 0 1fr; }
+  .sidebar { display: none; }
+  .ai-panel { width: 280px; }
+  .dashboard-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <!-- 左侧导航栏 -->
+  <nav class="nav-rail">
+    <div class="logo">鲸</div>
+    <div class="nav-item active tooltip" data-tip="仪表盘" onclick="switchView('dashboard')" data-view="dashboard">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tip="叙事树" onclick="switchView('narrative')" data-view="narrative">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M7 15H5M12 15h-2M17 15h-2"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tip="编辑器" onclick="switchView('editor')" data-view="editor">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tip="角色&世界" onclick="switchView('characters')" data-view="characters">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tip="一致性" onclick="switchView('consistency')" data-view="consistency">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tip="分支探索" onclick="switchView('branch')" data-view="branch">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3v12"/><circle cx="6" cy="3" r="2"/><circle cx="6" cy="9" r="2"/><circle cx="6" cy="15" r="2"/><path d="M18 9v6"/><circle cx="18" cy="9" r="2"/><circle cx="18" cy="15" r="2"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tip="读者模拟" onclick="switchView('reader')" data-view="reader">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+    </div>
+    <div class="divider"></div>
+    <div class="bottom-group">
+      <div class="nav-item tooltip" data-tip="题材选择" onclick="showModal('genre')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      </div>
+      <div class="nav-item tooltip" data-tip="选项弹窗" onclick="showModal('question')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      </div>
+      <div class="nav-item tooltip" data-tip="设置">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.17 15 1.65 1.65 0 002.5 14V12a2 2 0 012-2h.09A1.65 1.65 0 006 8.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 0010.6 5 1.65 1.65 0 0011.5 3.5V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V10a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </div>
+    </div>
+  </nav>
+
+  <!-- 侧边栏 -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div>
+        <div class="sidebar-title">《仙途逆旅》</div>
+        <div class="sidebar-subtitle">仙侠 · 第 3 卷 / 共 8 卷</div>
+      </div>
+      <div class="sidebar-actions">
+        <button title="新建"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
+        <button title="折叠"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+      </div>
+    </div>
+    <div class="tree-list">
+      <div class="tree-section">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        卷一：初入仙途
+      </div>
+      <div class="tree-item active" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="tree-label">第一章 废材觉醒</span>
+        <span class="tree-badge draft">草稿</span>
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="tree-label">第二章 灵根测试</span>
+        <span class="tree-badge outlined">细纲</span>
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="tree-label">第三章 拜师入门</span>
+        <span class="tree-badge planned">计划</span>
+      </div>
+      <div class="tree-section">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        卷二：宗门风云
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="tree-label">第四章 内门试炼</span>
+        <span class="tree-badge hook">钩子</span>
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="tree-label">第五章 秘境探险</span>
+        <span class="tree-badge planned">计划</span>
+      </div>
+      <div class="tree-section">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        卷三：逆天而行
+      </div>
+      <div class="tree-section">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        世界观
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/><path d="M2 12h20"/></svg>
+        <span class="tree-label">地理设定</span>
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 000 20 14.5 14.5 0 000-20"/><path d="M2 12h20"/></svg>
+        <span class="tree-label">修炼体系</span>
+      </div>
+      <div class="tree-section">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        角色
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span class="tree-label">林墨（主角）</span>
+      </div>
+      <div class="tree-item" style="--depth:0">
+        <svg class="tree-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <span class="tree-label">苏清雪</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- 顶部栏 -->
+  <header class="top-header">
+    <div class="breadcrumb">
+      <span>仙途逆旅</span>
+      <span class="sep">/</span>
+      <span>卷一</span>
+      <span class="sep">/</span>
+      <span class="current">第一章 废材觉醒</span>
+    </div>
+    <div class="header-actions">
+      <div class="stage-pill">
+        <div class="stage-step done"><span class="step-dot"></span>构思</div>
+        <div class="stage-step done"><span class="step-dot"></span>大纲</div>
+        <div class="stage-step done"><span class="step-dot"></span>细纲</div>
+        <div class="stage-step active"><span class="step-dot"></span>写作</div>
+        <div class="stage-step"><span class="step-dot"></span>润色</div>
+      </div>
+      <div class="word-count">12,847 / 50,000 字</div>
+    </div>
+  </header>
+
+  <!-- 主内容区 -->
+  <main class="main-content">
+
+    <!-- 仪表盘视图 -->
+    <div class="view dashboard-view active" id="view-dashboard">
+      <div class="dashboard-grid">
+        <div class="metric-card">
+          <div class="metric-label">总字数</div>
+          <div class="metric-value">128,472</div>
+          <div class="metric-delta up">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="18 15 12 9 6 15"/></svg>
+            今日 +3,240
+          </div>
+          <div class="metric-bar"><div class="metric-fill" style="width:64%; background:var(--verdigris)"></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">章节数</div>
+          <div class="metric-value">47</div>
+          <div class="metric-delta up">已完成 32 / 计划 80</div>
+          <div class="metric-bar"><div class="metric-fill" style="width:40%; background:var(--gold)"></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">一致性评分</div>
+          <div class="metric-value" style="color:var(--verdigris-light)">92</div>
+          <div class="metric-delta up">较上周 +5</div>
+          <div class="metric-bar"><div class="metric-fill" style="width:92%; background:var(--verdigris)"></div></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">去 AI 味评分</div>
+          <div class="metric-value" style="color:var(--gold-light)">87</div>
+          <div class="metric-delta down">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+            需优化 3 处
+          </div>
+          <div class="metric-bar"><div class="metric-fill" style="width:87%; background:var(--gold)"></div></div>
+        </div>
+      </div>
+      <div class="dashboard-row">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">情绪曲线</span>
+            <span style="font-size:11px;color:var(--text-muted)">卷一 · 前10章</span>
+          </div>
+          <div class="panel-body">
+            <div class="emotion-chart">
+              <svg viewBox="0 0 400 140" preserveAspectRatio="none">
+                <defs>
+                  <linearGradient id="emotionGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stop-color="rgba(194,58,43,0.3)"/>
+                    <stop offset="100%" stop-color="rgba(194,58,43,0)"/>
+                  </linearGradient>
+                </defs>
+                <line class="chart-grid" x1="0" y1="35" x2="400" y2="35"/>
+                <line class="chart-grid" x1="0" y1="70" x2="400" y2="70"/>
+                <line class="chart-grid" x1="0" y1="105" x2="400" y2="105"/>
+                <path class="chart-area" d="M0,105 L40,80 L80,60 L120,90 L160,50 L200,70 L240,40 L280,85 L320,55 L360,30 L400,45 L400,140 L0,140 Z" fill="url(#emotionGrad)"/>
+                <path class="chart-line" d="M0,105 L40,80 L80,60 L120,90 L160,50 L200,70 L240,40 L280,85 L320,55 L360,30 L400,45"/>
+                <circle class="chart-dot" cx="0" cy="105"/><circle class="chart-dot" cx="40" cy="80"/><circle class="chart-dot" cx="80" cy="60"/><circle class="chart-dot" cx="120" cy="90"/>
+                <circle class="chart-dot" cx="160" cy="50"/><circle class="chart-dot" cx="200" cy="70"/><circle class="chart-dot" cx="240" cy="40"/><circle class="chart-dot" cx="280" cy="85"/>
+                <circle class="chart-dot" cx="320" cy="55"/><circle class="chart-dot" cx="360" cy="30"/><circle class="chart-dot" cx="400" cy="45"/>
+                <text class="chart-label" x="0" y="155">1</text><text class="chart-label" x="40" y="155">2</text><text class="chart-label" x="80" y="155">3</text>
+                <text class="chart-label" x="120" y="155">4</text><text class="chart-label" x="160" y="155">5</text><text class="chart-label" x="200" y="155">6</text>
+                <text class="chart-label" x="240" y="155">7</text><text class="chart-label" x="280" y="155">8</text><text class="chart-label" x="320" y="155">9</text>
+                <text class="chart-label" x="360" y="155">10</text>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">最近章节</span>
+            <span style="font-size:11px;color:var(--text-muted)">按更新时间</span>
+          </div>
+          <div class="panel-body">
+            <div class="chapter-list">
+              <div class="chapter-row">
+                <span class="ch-num">Ch.47</span>
+                <span class="ch-title">天劫降临</span>
+                <span class="ch-status draft">草稿</span>
+                <span class="ch-words">2,340字</span>
+              </div>
+              <div class="chapter-row">
+                <span class="ch-num">Ch.46</span>
+                <span class="ch-title">渡劫准备</span>
+                <span class="ch-status draft">草稿</span>
+                <span class="ch-words">3,120字</span>
+              </div>
+              <div class="chapter-row">
+                <span class="ch-num">Ch.45</span>
+                <span class="ch-title">宗门大比</span>
+                <span class="ch-status outlined">细纲</span>
+                <span class="ch-words">1,800字</span>
+              </div>
+              <div class="chapter-row">
+                <span class="ch-num">Ch.44</span>
+                <span class="ch-title">暗流涌动</span>
+                <span class="ch-status published">已发布</span>
+                <span class="ch-words">2,950字</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dashboard-row">
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">子智能体流水线</span>
+            <span style="font-size:11px;color:var(--verdigris-light)">运行中</span>
+          </div>
+          <div class="panel-body">
+            <div style="display:flex;gap:var(--space-3);align-items:center;">
+              <div style="text-align:center;padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border-radius:var(--radius-md);border:1px solid var(--verdigris);">
+                <div style="font-size:11px;color:var(--verdigris-light);margin-bottom:4px;">架构师</div>
+                <div style="font-size:12px;color:var(--text-secondary);">已完成</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink-500)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              <div style="text-align:center;padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border-radius:var(--radius-md);border:1px solid var(--verdigris);">
+                <div style="font-size:11px;color:var(--verdigris-light);margin-bottom:4px;">大纲师</div>
+                <div style="font-size:12px;color:var(--text-secondary);">已完成</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink-500)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              <div style="text-align:center;padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border-radius:var(--radius-md);border:1px solid var(--gold);">
+                <div style="font-size:11px;color:var(--gold-light);margin-bottom:4px;">写手</div>
+                <div style="font-size:12px;color:var(--text-secondary);">写作中</div>
+              </div>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--ink-500)" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+              <div style="text-align:center;padding:var(--space-3) var(--space-4);background:var(--bg-elevated);border-radius:var(--radius-md);border:1px solid var(--border-subtle);">
+                <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">编辑</div>
+                <div style="font-size:12px;color:var(--text-muted);">等待中</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">中期疲软诊断</span>
+            <span style="font-size:11px;color:var(--verdigris-light)">健康</span>
+          </div>
+          <div class="panel-body">
+            <div style="display:flex;flex-direction:column;gap:var(--space-3);">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:13px;color:var(--text-secondary);">爽点密度</span>
+                <span style="font-family:var(--font-mono);font-size:13px;color:var(--verdigris-light);">0.42/章</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:13px;color:var(--text-secondary);">钩子回收率</span>
+                <span style="font-family:var(--font-mono);font-size:13px;color:var(--verdigris-light);">78%</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:13px;color:var(--text-secondary);">情绪低谷检测</span>
+                <span style="font-family:var(--font-mono);font-size:13px;color:var(--gold-light);">第23-25章</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:13px;color:var(--text-secondary);">陈词滥调指数</span>
+                <span style="font-family:var(--font-mono);font-size:13px;color:var(--verdigris-light);">低 (3%)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 叙事树视图 -->
+    <div class="view narrative-view" id="view-narrative">
+      <div class="narrative-toolbar">
+        <h2>叙事图</h2>
+        <div class="filter-pills">
+          <button class="filter-pill active">全部</button>
+          <button class="filter-pill">钩子</button>
+          <button class="filter-pill">冲突</button>
+          <button class="filter-pill">高潮</button>
+          <button class="filter-pill">转折</button>
+        </div>
+      </div>
+      <div class="narrative-canvas">
+        <div class="narrative-arc">
+          <div class="arc-header">
+            <span class="arc-title">卷一：初入仙途</span>
+            <span class="arc-type">主线</span>
+          </div>
+          <div class="arc-nodes">
+            <div class="node-card selected">
+              <div class="node-type hook">钩子</div>
+              <div class="node-title">废材觉醒</div>
+              <div class="node-meta">Ch.1 · 情绪 +0.8</div>
+              <div class="node-emotion" style="width:80%"></div>
+            </div>
+            <div class="node-connector">→</div>
+            <div class="node-card">
+              <div class="node-type setup">铺垫</div>
+              <div class="node-title">灵根测试</div>
+              <div class="node-meta">Ch.2 · 情绪 +0.2</div>
+              <div class="node-emotion" style="width:30%"></div>
+            </div>
+            <div class="node-connector">→</div>
+            <div class="node-card">
+              <div class="node-type setup">铺垫</div>
+              <div class="node-title">拜师入门</div>
+              <div class="node-meta">Ch.3 · 情绪 +0.3</div>
+              <div class="node-emotion" style="width:35%"></div>
+            </div>
+            <div class="node-connector">→</div>
+            <div class="node-card">
+              <div class="node-type conflict">冲突</div>
+              <div class="node-title">内门试炼</div>
+              <div class="node-meta">Ch.4 · 情绪 +0.6</div>
+              <div class="node-emotion" style="width:65%"></div>
+            </div>
+            <div class="node-connector">→</div>
+            <div class="node-card">
+              <div class="node-type climax">高潮</div>
+              <div class="node-title">秘境探险</div>
+              <div class="node-meta">Ch.5 · 情绪 +0.9</div>
+              <div class="node-emotion" style="width:95%"></div>
+            </div>
+            <div class="node-connector">→</div>
+            <div class="node-card">
+              <div class="node-type twist">转折</div>
+              <div class="node-title">身份揭露</div>
+              <div class="node-meta">Ch.6 · 情绪 +0.7</div>
+              <div class="node-emotion" style="width:75%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="narrative-arc">
+          <div class="arc-header">
+            <span class="arc-title">卷二：宗门风云</span>
+            <span class="arc-type">主线</span>
+          </div>
+          <div class="arc-nodes">
+            <div class="node-card">
+              <div class="node-type hook">钩子</div>
+              <div class="node-title">神秘来客</div>
+              <div class="node-meta">Ch.7 · 情绪 +0.8</div>
+              <div class="node-emotion" style="width:85%"></div>
+            </div>
+            <div class="node-connector">→</div>
+            <div class="node-card">
+              <div class="node-type setup">铺垫</div>
+              <div class="node-title">暗流涌动</div>
+              <div class="node-meta">Ch.8 · 情绪 +0.4</div>
+              <div class="node-emotion" style="width:45%"></div>
+            </div>
+            <div class="node-connector">→</div>
+            <div class="node-card">
+              <div class="node-type conflict">冲突</div>
+              <div class="node-title">宗门大比</div>
+              <div class="node-meta">Ch.9 · 情绪 +0.7</div>
+              <div class="node-emotion" style="width:72%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 编辑器+AI 对话视图 -->
+    <div class="view editor-view" id="view-editor">
+      <div class="editor-pane">
+        <div class="editor-toolbar">
+          <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> 续写</button>
+          <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg> 润色</button>
+          <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.828 2.828 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg> 改视角</button>
+          <div class="toolbar-spacer"></div>
+          <button class="primary"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> 保存</button>
+        </div>
+        <textarea class="editor-textarea" placeholder="在此开始你的创作...">
+第一章 废材觉醒
+
+暮色四合，青云宗外门弟子居所的偏院里，林墨盘坐在蒲团上，额头渗出细密的汗珠。
+
+三年了。入宗整整三年，他的修为始终停留在炼气一层，连最基本的御剑术都无法施展。同批入门的弟子早已突破炼气中期，而他，依旧是那个被人嘲笑的"废材"。
+
+"林墨！"院外传来一声厉喝，"长老召见，速去大殿！"
+
+他缓缓睁开眼，眸中闪过一丝不易察觉的精光。没有人知道，每当夜深人静，他体内那股被封印的力量便会悄然涌动——那是他十六岁那年，在山中偶遇一位濒死老者时，对方强行灌入他体内的神秘灵力。
+
+"来了。"林墨起身，拍了拍衣袍上的灰尘，嘴角浮起一抹意味深长的笑容。
+
+或许，是时候让某些人闭嘴了。
+        </textarea>
+      </div>
+      <div class="ai-panel">
+        <div class="ai-header">
+          <div class="ai-avatar">AI</div>
+          <span class="ai-name">创作助手</span>
+          <span class="ai-status">在线</span>
+        </div>
+        <div class="ai-messages">
+          <div class="message ai">
+            <div class="msg-avatar">AI</div>
+            <div>
+              <div class="msg-bubble">已加载《仙途逆旅》项目上下文。当前处于<strong>写作阶段</strong>，检测到您正在创作第一章。需要我协助续写、润色，还是检查一致性？</div>
+              <div class="msg-time">10:32</div>
+            </div>
+          </div>
+          <div class="message user">
+            <div class="msg-avatar">我</div>
+            <div>
+              <div class="msg-bubble">帮我续写这一章，林墨在大殿上被长老当众羞辱，然后觉醒体内的神秘力量</div>
+              <div class="msg-time">10:33</div>
+            </div>
+          </div>
+          <div class="message ai">
+            <div class="msg-avatar">AI</div>
+            <div>
+              <div class="msg-bubble">好的，我来续写这个<strong>打脸+觉醒</strong>的经典场景。根据叙事图，这一章需要包含：
+
+1. <strong>羞辱铺垫</strong>：长老当众宣布废除林墨外门弟子身份
+2. <strong>冲突升级</strong>：昔日好友冷眼旁观，仇人落井下石
+3. <strong>觉醒触发</strong>：林墨被逼至绝境，体内封印松动
+4. <strong>爽点爆发</strong>：神秘力量觉醒，震慑全场
+
+预计生成约 <strong>2,400 字</strong>，保持仙侠文风，避免 AI 味。是否开始？</div>
+              <div class="msg-time">10:33</div>
+            </div>
+          </div>
+        </div>
+        <div class="ai-input-area">
+          <div class="ai-input-wrap">
+            <textarea placeholder="输入指令..." rows="1"></textarea>
+            <button><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 角色&世界观视图 -->
+    <div class="view characters-view" id="view-characters">
+      <div class="characters-sidebar">
+        <div class="sidebar-title">角色</div>
+        <div class="char-list">
+          <div class="char-list-item active">
+            <div class="char-avatar">林</div>
+            <div class="char-info">
+              <div class="char-name">林墨</div>
+              <div class="char-role">主角</div>
+            </div>
+            <div class="char-status-dot alive"></div>
+          </div>
+          <div class="char-list-item">
+            <div class="char-avatar">苏</div>
+            <div class="char-info">
+              <div class="char-name">苏清雪</div>
+              <div class="char-role">女主</div>
+            </div>
+            <div class="char-status-dot alive"></div>
+          </div>
+          <div class="char-list-item">
+            <div class="char-avatar">萧</div>
+            <div class="char-info">
+              <div class="char-name">萧天绝</div>
+              <div class="char-role">反派</div>
+            </div>
+            <div class="char-status-dot alive"></div>
+          </div>
+          <div class="char-list-item">
+            <div class="char-avatar">玄</div>
+            <div class="char-info">
+              <div class="char-name">玄清子</div>
+              <div class="char-role">导师</div>
+            </div>
+            <div class="char-status-dot dead"></div>
+          </div>
+        </div>
+        <div style="margin-top:var(--space-6)">
+          <div class="sidebar-title">世界观</div>
+          <div class="char-list" style="margin-top:var(--space-3)">
+            <div class="char-list-item">
+              <div class="char-info">
+                <div class="char-name">修炼体系</div>
+                <div class="char-role">炼气→筑基→金丹→元婴→化神</div>
+              </div>
+            </div>
+            <div class="char-list-item">
+              <div class="char-info">
+                <div class="char-name">地理设定</div>
+                <div class="char-role">青云大陆 · 九大宗门</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="char-detail">
+        <div class="char-detail-header">
+          <div class="char-detail-avatar">林</div>
+          <div>
+            <div class="char-detail-name">林墨</div>
+            <div class="char-detail-role">青云宗外门弟子 · 炼气一层 · 存活</div>
+          </div>
+        </div>
+        <div class="char-detail-grid">
+          <div class="char-detail-section">
+            <div class="section-label">外貌</div>
+            <div class="section-value">十七岁少年，身形瘦削，眉眼间带着与年龄不符的沉稳。右眼角有一颗淡褐色泪痣，笑起来时若隐若现。</div>
+          </div>
+          <div class="char-detail-section">
+            <div class="section-label">性格</div>
+            <div class="section-value">表面隐忍内敛，实则心思缜密。善于藏拙，不轻易暴露底牌。对敌人冷酷果决，对朋友重情重义。</div>
+          </div>
+          <div class="char-detail-section">
+            <div class="section-label">背景</div>
+            <div class="section-value">出身贫寒，幼年丧父，与母亲相依为命。十六岁入青云宗，因灵根资质平庸被判定为"废材"。体内封印着上古大能的传承之力。</div>
+          </div>
+          <div class="char-detail-section">
+            <div class="section-label">目标</div>
+            <div class="section-value">打破"废材"标签，查明父亲死因，解开体内封印之谜，最终踏上仙途巅峰。</div>
+          </div>
+          <div class="char-detail-section">
+            <div class="section-label">人际关系</div>
+            <div class="section-value">苏清雪（青梅竹马，暗中相助）<br>萧天绝（宗门天才，明面敌对）<br>玄清子（已故，传承之力来源）</div>
+          </div>
+          <div class="char-detail-section">
+            <div class="section-label">关键设定（已锁定）</div>
+            <div class="section-value" style="color:var(--cinnabar-light)">体内封印不可提前完全解开<br>泪痣是传承印记的显现<br>母亲身份为隐藏伏笔</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 一致性检查视图 -->
+    <div class="view consistency-view" id="view-consistency">
+      <div class="consistency-score">
+        <div class="score-ring">
+          <svg viewBox="0 0 100 100" width="100" height="100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--ink-700)" stroke-width="8"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--verdigris)" stroke-width="8" stroke-linecap="round"
+              stroke-dasharray="264" stroke-dashoffset="21" transform="rotate(-90 50 50)"/>
+          </svg>
+          <div class="score-text">92</div>
+        </div>
+        <div class="score-details">
+          <h3>一致性检查报告</h3>
+          <p>基于结构化事实库 + 向量 RAG 检索，共检测 5 大类 19 子类规则。当前项目整体一致性良好，发现 3 处待确认问题。</p>
+        </div>
+      </div>
+      <div class="issue-list">
+        <div class="issue-item critical">
+          <svg class="issue-icon" viewBox="0 0 24 24" fill="none" stroke="var(--cinnabar)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <div class="issue-content">
+            <div class="issue-title">角色状态矛盾</div>
+            <div class="issue-desc">第三章记载玄清子"三年前陨落于天劫"，但第五章提到"玄清子留下的玉简中记录了完整的功法"。若已陨落，如何留下玉简？需确认是生前遗留还是死后由他人转交。</div>
+            <div class="issue-location">Ch.3 vs Ch.5 · 角色:玄清子</div>
+          </div>
+        </div>
+        <div class="issue-item warning">
+          <svg class="issue-icon" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <div class="issue-content">
+            <div class="issue-title">战力体系漂移</div>
+            <div class="issue-desc">第十二章中筑基期弟子"一剑斩断山峰"，但设定中筑基期修士的破坏力上限为"击碎巨石"。建议调整描写或补充特殊法宝/功法解释。</div>
+            <div class="issue-location">Ch.12 · 世界规则:修炼体系</div>
+          </div>
+        </div>
+        <div class="issue-item info">
+          <svg class="issue-icon" viewBox="0 0 24 24" fill="none" stroke="var(--verdigris)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <div class="issue-content">
+            <div class="issue-title">时间线提示</div>
+            <div class="issue-desc">从青云宗到万剑山庄的距离设定为"三千里"，御剑飞行需"一日一夜"。但第二十章中主角"半日即达"，建议补充加速原因（如传送阵、紧急秘法）。</div>
+            <div class="issue-location">Ch.20 · 时间线:地理移动</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 分支探索视图 -->
+    <div class="view branch-view" id="view-branch">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);">
+        <h2 style="font-family:var(--font-serif);font-size:18px;">剧情分支探索</h2>
+        <button class="btn btn-primary">+ 新建分支</button>
+      </div>
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:var(--space-4);">当前决策点：<strong>第六章结尾</strong> — 林墨觉醒后，是选择隐忍藏拙还是直接挑战萧天绝？</p>
+      <div class="branch-tree">
+        <div class="branch-node current">
+          <div class="branch-line"></div>
+          <div class="branch-connector"></div>
+          <div class="branch-content">
+            <div class="branch-title">主线：觉醒</div>
+            <div class="branch-desc">林墨体内封印松动，神秘力量初现端倪。长老震惊，全场哗然。</div>
+          </div>
+        </div>
+        <div class="branch-node">
+          <div class="branch-line"></div>
+          <div class="branch-connector"></div>
+          <div class="branch-content">
+            <div class="branch-title">分支 A：隐忍藏拙</div>
+            <div class="branch-desc">林墨假装力量失控后昏倒，暗中观察各方反应。后续可发展"扮猪吃虎"线，但爽点延迟。</div>
+          </div>
+          <div class="branch-actions">
+            <button>预览</button>
+            <button class="primary">采用</button>
+          </div>
+        </div>
+        <div class="branch-node">
+          <div class="branch-line"></div>
+          <div class="branch-connector"></div>
+          <div class="branch-content">
+            <div class="branch-title">分支 B：正面挑战</div>
+            <div class="branch-desc">林墨直接挑战萧天绝，当众击败对方。爽点即时爆发，但后续宗门压力增大，需引入更强反派。</div>
+          </div>
+          <div class="branch-actions">
+            <button>预览</button>
+            <button class="primary">采用</button>
+          </div>
+        </div>
+        <div class="branch-node">
+          <div class="branch-line"></div>
+          <div class="branch-connector"></div>
+          <div class="branch-content">
+            <div class="branch-title">分支 C：借势脱身</div>
+            <div class="branch-desc">林墨借觉醒之力震慑全场后，以"需要闭关稳固境界"为由离开宗门，开启独立修行线。</div>
+          </div>
+          <div class="branch-actions">
+            <button>预览</button>
+            <button class="primary">采用</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 读者模拟视图 -->
+    <div class="view reader-view" id="view-reader">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--space-4);">
+        <h2 style="font-family:var(--font-serif);font-size:18px;">读者模拟</h2>
+        <div class="reader-tags">
+          <span class="reader-tag">仙侠迷</span>
+          <span class="reader-tag">爽文爱好者</span>
+          <span class="reader-tag">追更党</span>
+        </div>
+      </div>
+      <div class="reader-profile">
+        <div class="reader-avatar">🧑</div>
+        <div class="reader-info">
+          <h3>典型读者画像："追更老王"</h3>
+          <p>28岁男性，每天追更3-5本仙侠小说。偏好"废材逆袭+打脸"套路，对节奏敏感，容忍度中等。弃书触发点：连续3章无爽点、战力崩坏、主角降智。</p>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:var(--font-mono);font-size:28px;font-weight:600;color:var(--verdigris-light);">72%</div>
+          <div style="font-size:12px;color:var(--text-muted);">留存概率</div>
+        </div>
+      </div>
+      <div class="reader-diary">
+        <div class="diary-entry">
+          <div class="diary-chapter">第一章 废材觉醒</div>
+          <div class="diary-text">"开局废材设定老套但有效，林墨的隐忍描写有代入感。泪痣这个细节不错，感觉后面会有大用。期待觉醒场景！"</div>
+          <div class="diary-emotion">
+            <div class="emotion-bar"><div class="emotion-fill" style="width:65%;background:var(--verdigris)"></div></div>
+            <span class="emotion-label">期待 +0.65</span>
+          </div>
+        </div>
+        <div class="diary-entry">
+          <div class="diary-chapter">第二章 灵根测试</div>
+          <div class="diary-text">"测试过程有点拖沓，铺垫太长了。不过最后那个'灵根碎裂'的反转有点意思，希望第三章直接打脸，别让我等太久。"</div>
+          <div class="diary-emotion">
+            <div class="emotion-bar"><div class="emotion-fill" style="width:45%;background:var(--gold)"></div></div>
+            <span class="emotion-label">耐心 +0.45</span>
+          </div>
+        </div>
+        <div class="diary-entry">
+          <div class="diary-chapter">第三章 拜师入门（预测）</div>
+          <div class="diary-text">"如果这一章还不觉醒，我可能要弃书了。废材流的核心就是'隐忍后的爆发'，铺垫两章是极限。建议作者在这一章结尾安排一个小高潮。"</div>
+          <div class="diary-emotion">
+            <div class="emotion-bar"><div class="emotion-fill" style="width:30%;background:var(--cinnabar)"></div></div>
+            <span class="emotion-label">焦虑 +0.30</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- 底部状态栏 -->
+  <footer class="status-bar">
+    <div class="status-left">
+      <div class="status-item"><span class="status-dot online"></span> DeepSeek V4</div>
+      <div class="status-item">模型: Pro</div>
+      <div class="status-item">上下文: 12K / 128K</div>
+    </div>
+    <div class="status-right">
+      <div class="status-item">UTF-8</div>
+      <div class="status-item">自动保存: 开启</div>
+      <div class="status-item">NovelWhale v0.9.0</div>
+    </div>
+  </footer>
+
+</div>
+
+<!-- ========== 模态弹窗 ========== -->
+
+<!-- 题材选择弹窗 -->
+<div class="modal-overlay" id="modal-genre">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>选择题材</h3>
+      <button class="modal-close" onclick="hideModal('genre')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:var(--space-4);">选择你的小说题材，系统将自动加载对应的叙事模板和一致性规则。</p>
+      <div class="genre-grid">
+        <div class="genre-card selected">
+          <div class="genre-icon">⚔️</div>
+          <div class="genre-name">仙侠</div>
+          <div class="genre-desc">修仙 · 境界 · 师门</div>
+        </div>
+        <div class="genre-card">
+          <div class="genre-icon">🏙️</div>
+          <div class="genre-name">都市</div>
+          <div class="genre-desc">现实 · 情感 · 职场</div>
+        </div>
+        <div class="genre-card">
+          <div class="genre-icon">🚀</div>
+          <div class="genre-name">科幻</div>
+          <div class="genre-desc">未来 · 星际 · 科技</div>
+        </div>
+        <div class="genre-card">
+          <div class="genre-icon">🐉</div>
+          <div class="genre-name">玄幻</div>
+          <div class="genre-desc">异世 · 魔法 · 种族</div>
+        </div>
+        <div class="genre-card">
+          <div class="genre-icon">📜</div>
+          <div class="genre-name">历史</div>
+          <div class="genre-desc">穿越 · 权谋 · 战争</div>
+        </div>
+        <div class="genre-card">
+          <div class="genre-icon">💕</div>
+          <div class="genre-name">言情</div>
+          <div class="genre-desc">甜宠 · 虐恋 · 重生</div>
+        </div>
+        <div class="genre-card">
+          <div class="genre-icon">🔍</div>
+          <div class="genre-name">悬疑</div>
+          <div class="genre-desc">推理 · 惊悚 · 探案</div>
+        </div>
+        <div class="genre-card">
+          <div class="genre-icon">🎮</div>
+          <div class="genre-name">系统流</div>
+          <div class="genre-desc">任务 · 奖励 · 升级</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('genre')">取消</button>
+      <button class="btn btn-primary" onclick="hideModal('genre')">确认选择</button>
+    </div>
+  </div>
+</div>
+
+<!-- 选项弹窗 -->
+<div class="modal-overlay" id="modal-question">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>创作决策</h3>
+      <button class="modal-close" onclick="hideModal('question')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="question-card">
+        <div class="question-text">林墨觉醒后，你希望他以什么方式面对萧天绝？</div>
+        <div class="question-options">
+          <div class="question-option selected">
+            <div class="opt-num">A</div>
+            <div class="opt-content">
+              <div class="opt-label">隐忍藏拙，暗中布局</div>
+              <div class="opt-desc">假装力量失控后昏倒，后续"扮猪吃虎"，爽点延迟但反转更大</div>
+            </div>
+          </div>
+          <div class="question-option">
+            <div class="opt-num">B</div>
+            <div class="opt-content">
+              <div class="opt-label">正面挑战，当场打脸</div>
+              <div class="opt-desc">直接击败萧天绝，爽点即时爆发，但宗门压力增大</div>
+            </div>
+          </div>
+          <div class="question-option">
+            <div class="opt-num">C</div>
+            <div class="opt-content">
+              <div class="opt-label">借势脱身，独立修行</div>
+              <div class="opt-desc">以"闭关稳固境界"为由离开宗门，开启独立修行线</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="hideModal('question')">跳过</button>
+      <button class="btn btn-primary" onclick="hideModal('question')">确认选择</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// 视图切换
+function switchView(viewName) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('view-' + viewName)?.classList.add('active');
+  document.querySelector('.nav-item[data-view="' + viewName + '"]')?.classList.add('active');
+}
+
+// 模态弹窗
+function showModal(id) {
+  document.getElementById('modal-' + id).classList.add('active');
+}
+function hideModal(id) {
+  document.getElementById('modal-' + id).classList.remove('active');
+}
+
+// 选项选择
+document.querySelectorAll('.question-option').forEach(opt => {
+  opt.addEventListener('click', () => {
+    opt.parentElement.querySelectorAll('.question-option').forEach(o => o.classList.remove('selected'));
+    opt.classList.add('selected');
+  });
+});
+
+// 题材选择
+document.querySelectorAll('.genre-card').forEach(card => {
+  card.addEventListener('click', () => {
+    card.parentElement.querySelectorAll('.genre-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+  });
+});
+
+// 节点卡片点击
+document.querySelectorAll('.node-card').forEach(node => {
+  node.addEventListener('click', () => {
+    node.parentElement.querySelectorAll('.node-card').forEach(n => n.classList.remove('selected'));
+    node.classList.add('selected');
+  });
+});
+
+// 角色列表点击
+document.querySelectorAll('.char-list-item').forEach(item => {
+  item.addEventListener('click', () => {
+    item.parentElement.querySelectorAll('.char-list-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+  });
+});
+
+// 过滤标签
+document.querySelectorAll('.filter-pill').forEach(pill => {
+  pill.addEventListener('click', () => {
+    pill.parentElement.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+    pill.classList.add('active');
+  });
+});
+
+// 点击遮罩关闭弹窗
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) overlay.classList.remove('active');
+  });
+});
+</script>
+
+</body>
+</html>

@@ -1088,7 +1088,7 @@ async fn run_shell_command_op_requests_approval_and_executes_shell() {
                 AppMode::Agent,
                 false,
                 false,
-                crate::tui::approval::ApprovalMode::Suggest,
+                codewhale_engine::ApprovalMode::Suggest,
             )
             .await;
     });
@@ -1154,7 +1154,7 @@ async fn run_shell_command_op_skips_approval_when_auto_approved() {
             AppMode::Yolo,
             true,
             true,
-            crate::tui::approval::ApprovalMode::Auto,
+            codewhale_engine::ApprovalMode::Auto,
         )
         .await;
 
@@ -1192,7 +1192,7 @@ async fn run_shell_command_op_preserves_plan_mode_shell_block() {
             AppMode::Plan,
             false,
             false,
-            crate::tui::approval::ApprovalMode::Suggest,
+            codewhale_engine::ApprovalMode::Suggest,
         )
         .await;
 

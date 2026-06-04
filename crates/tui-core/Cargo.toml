@@ -1,7 +1,12 @@
 [package]
-name = "codewhale-tui-core"
+name = "codewhale-shell"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Event-driven TUI state machine scaffold for DeepSeek workspace architecture"
+description = "UI-agnostic shell state management for CodeWhale multi-frontend architecture"
+
+[dependencies]
+codewhale-engine = { path = "../engine" }
+serde = { workspace = true }
+serde_json = { workspace = true }

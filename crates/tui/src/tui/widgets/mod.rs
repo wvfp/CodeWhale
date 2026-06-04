@@ -26,7 +26,8 @@ use std::time::Duration;
 
 use crate::localization::Locale;
 use crate::palette;
-use crate::tui::app::{App, AppMode, ComposerDensity, VimMode};
+use crate::tui::app::{App, ComposerDensity, VimMode};
+use codewhale_engine::AppMode;
 use crate::tui::approval::{
     ApprovalRequest, ApprovalView, ElevationOption, ElevationRequest, RiskLevel, ToolCategory,
 };

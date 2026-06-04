@@ -16,7 +16,7 @@ const USER_INPUT_TIMEOUT: Duration = Duration::from_secs(300);
 use super::Engine;
 
 #[derive(Debug, Clone)]
-pub(super) enum ApprovalDecision {
+pub(crate) enum ApprovalDecision {
     Approved {
         id: String,
     },
@@ -31,7 +31,7 @@ pub(super) enum ApprovalDecision {
 }
 
 #[derive(Debug, Clone)]
-pub(super) enum UserInputDecision {
+pub(crate) enum UserInputDecision {
     Submitted {
         id: String,
         response: UserInputResponse,

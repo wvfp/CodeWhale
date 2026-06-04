@@ -1,99 +1,147 @@
-//! Events emitted by the core engine to the UI.
+//! Events emitted by the core engine to any frontend.
 //!
-//! These events flow from the engine to the TUI via a channel,
-//! enabling non-blocking, real-time updates.
+//! These events flow from the engine to the UI (TUI, Web, Android) via a
+//! channel, enabling non-blocking, real-time updates. All types are fully
+//! serializable so they can cross process boundaries.
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::core::coherence::CoherenceState;
-use crate::error_taxonomy::ErrorEnvelope;
-use crate::models::{Message, SystemPrompt, Tool, Usage};
-use crate::tools::spec::{ToolError, ToolResult};
-use crate::tools::subagent::SubAgentResult;
-use crate::tools::user_input::UserInputRequest;
+use crate::{NotificationKind, ToolErrorPayload, TurnOutcomeStatus};
+use codewhale_tools::ToolResult;
 
-/// Final status for a turn.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TurnOutcomeStatus {
-    Completed,
-    Interrupted,
-    Failed,
+// ---------------------------------------------------------------------------
+// Serializable payload types for tui-specific domain objects
+// ---------------------------------------------------------------------------
+
+/// Broad category for typed error handling and policy decisions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorCategory {
+    Network,
+    Authentication,
+    Authorization,
+    RateLimit,
+    Timeout,
+    InvalidInput,
+    Parse,
+    Tool,
+    State,
+    Internal,
 }
 
-/// Events emitted by the engine to update the UI.
-#[derive(Debug, Clone)]
-pub enum Event {
+/// Severity hint for UI and logs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ErrorSeverity {
+    Info,
+    Warning,
+    Error,
+    Critical,
+}
+
+/// Unified envelope used when crossing subsystem boundaries.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ErrorEnvelope {
+    pub category: ErrorCategory,
+    pub severity: ErrorSeverity,
+    pub recoverable: bool,
+    pub code: String,
+    pub message: String,
+}
+
+/// User-facing coherence ladder for session health.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CoherenceState {
+    #[default]
+    Healthy,
+    GettingCrowded,
+    RefreshingContext,
+    VerifyingRecentWork,
+    ResettingPlan,
+}
+
+// ---------------------------------------------------------------------------
+// EngineEvent
+// ---------------------------------------------------------------------------
+
+/// Events emitted by the engine to update any frontend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "event", rename_all = "snake_case")]
+pub enum EngineEvent {
     // === Streaming Events ===
-    /// A new message block has started
+    /// A new message block has started.
     MessageStarted {
         #[allow(dead_code)]
         index: usize,
     },
 
-    /// Incremental text content delta
+    /// Incremental text content delta.
     MessageDelta {
         #[allow(dead_code)]
         index: usize,
         content: String,
     },
 
-    /// Message block completed
+    /// Message block completed.
     MessageComplete {
         #[allow(dead_code)]
         index: usize,
     },
 
-    /// Thinking block started
+    /// Thinking block started.
     ThinkingStarted {
         #[allow(dead_code)]
         index: usize,
     },
 
-    /// Incremental thinking content delta
+    /// Incremental thinking content delta.
     ThinkingDelta {
         #[allow(dead_code)]
         index: usize,
         content: String,
     },
 
-    /// Thinking block completed
+    /// Thinking block completed.
     ThinkingComplete {
         #[allow(dead_code)]
         index: usize,
     },
 
     // === Tool Events ===
-    /// Tool call initiated
+    /// Tool call initiated.
     ToolCallStarted {
         id: String,
         name: String,
         input: Value,
     },
 
-    /// Tool execution progress (for long-running tools)
+    /// Tool execution progress (for long-running tools).
     #[allow(dead_code)]
     ToolCallProgress { id: String, output: String },
 
-    /// Tool call completed
+    /// Tool call completed.
     ToolCallComplete {
         id: String,
         name: String,
-        result: Result<ToolResult, ToolError>,
+        result: Result<ToolResult, ToolErrorPayload>,
     },
 
     // === Turn Lifecycle ===
-    /// A new turn has started (user sent a message)
+    /// A new turn has started (user sent a message).
     TurnStarted { turn_id: String },
 
-    /// The turn is complete (no more tool calls)
+    /// The turn is complete (no more tool calls).
     TurnComplete {
-        usage: Usage,
+        /// Serialized usage statistics.
+        usage: Value,
         status: TurnOutcomeStatus,
         error: Option<String>,
-        /// Tool catalog sent with this turn's model request.
-        tool_catalog: Option<Vec<Tool>>,
+        /// Tool catalog sent with this turn's model request (serialized).
+        tool_catalog: Option<Value>,
         /// API base URL used by this turn's client.
         base_url: Option<String>,
     },
@@ -196,88 +244,80 @@ pub enum Event {
     },
 
     // === Sub-Agent Events ===
-    /// A sub-agent has been spawned
+    /// A sub-agent has been spawned.
     AgentSpawned { id: String, prompt: String },
 
-    /// Sub-agent progress update
+    /// Sub-agent progress update.
     AgentProgress { id: String, status: String },
 
-    /// Sub-agent completed
+    /// Sub-agent completed.
     AgentComplete { id: String, result: String },
 
-    /// Sub-agent listing
-    AgentList { agents: Vec<SubAgentResult> },
+    /// Sub-agent listing (serialized).
+    AgentList { agents: Value },
 
-    /// Structured sub-agent mailbox envelope (issue #128). Carries the
-    /// monotonic seq + the typed `MailboxMessage` so the UI can route each
+    /// Structured sub-agent mailbox envelope. Carries the monotonic seq and
+    /// the serialized mailbox message so the frontend can route each
     /// envelope to the correct in-transcript card.
     SubAgentMailbox {
         seq: u64,
-        message: crate::tools::subagent::MailboxMessage,
+        message: Value,
     },
 
     // === System Events ===
-    /// An error occurred
+    /// An error occurred.
     Error {
         envelope: ErrorEnvelope,
         #[allow(dead_code)]
         recoverable: bool,
     },
 
-    /// Status message for UI display
+    /// Status message for UI display.
     Status { message: String },
 
-    /// Pause terminal input events (for interactive subprocesses).
-    PauseEvents {
-        /// Optional one-shot notification fired after the UI has actually
-        /// released the terminal to the child process.
-        ack: Option<Arc<tokio::sync::Notify>>,
-    },
+    /// Pause frontend input events (for interactive subprocesses).
+    PauseEvents,
 
-    /// Resume terminal input events after subprocess completion
+    /// Resume frontend input events after subprocess completion.
     ResumeEvents,
 
-    /// Request user approval for a tool call
+    /// Request user approval for a tool call.
     ApprovalRequired {
         id: String,
         tool_name: String,
         description: String,
-        /// Tool parameters for approval display. Carried on the event so the
-        /// TUI does not need to reconstruct them from `pending_tool_uses`.
+        /// Tool parameters for approval display.
         input: Value,
-        /// Exact-argument fingerprint, used to scope *denials* (#1617).
+        /// Exact-argument fingerprint, used to scope *denials*.
         approval_key: String,
-        /// Lossy / arity-aware fingerprint, used to scope *approvals* so an
-        /// "approve for session" covers later flag variants (v0.8.37).
+        /// Lossy / arity-aware fingerprint, used to scope *approvals*.
         approval_grouping_key: String,
-        /// The model's explanation of intent before invoking write tools (#2381).
-        /// Displayed in the approval view so users understand *why* the change
-        /// is being made before reviewing *what* will change.
+        /// The model's explanation of intent before invoking write tools.
         intent_summary: Option<String>,
     },
 
-    /// Request user input for a tool call
+    /// Request user input for a tool call (serialized payload).
     UserInputRequired {
         id: String,
-        request: UserInputRequest,
+        request: Value,
     },
 
     /// Authoritative API conversation state from the engine session.
     ///
-    /// The UI receives granular display events, but those are not always a
-    /// lossless representation of the API transcript. DeepSeek can emit
-    /// reasoning directly followed by tool calls without a visible assistant
-    /// text block, and that assistant message still has to be persisted for
-    /// later `reasoning_content` replay.
+    /// The frontend receives granular display events, but those are not always
+    /// a lossless representation of the API transcript. This event carries the
+    /// full serialized session state for persistence.
     SessionUpdated {
         session_id: String,
-        messages: Vec<Message>,
-        system_prompt: Option<SystemPrompt>,
+        /// Serialized conversation messages.
+        messages: Value,
+        /// Serialized system prompt.
+        system_prompt: Value,
         model: String,
         workspace: PathBuf,
     },
 
-    /// Request user decision after sandbox denial
+    /// Request user decision after sandbox denial.
     #[allow(dead_code)]
     ElevationRequired {
         tool_id: String,
@@ -290,8 +330,7 @@ pub enum Event {
 
     // === Prefix-Cache Stability Events ===
     /// The prefix (system prompt + tool specs) changed between turns,
-    /// which invalidates DeepSeek's KV prefix cache. Carries diagnostics
-    /// for the TUI to surface.
+    /// which invalidates DeepSeek's KV prefix cache.
     PrefixCacheChange {
         /// Human-readable description of what changed.
         description: String,
@@ -302,38 +341,16 @@ pub enum Event {
         /// Overall prefix stability percentage (100 = fully stable).
         stability_pct: u32,
         /// True when the prefix actually changed (cache invalidated).
-        /// False for routine stable-check heartbeats.
         changed: bool,
         /// Current pinned prefix combined hash (SHA-256, 64 hex chars).
-        /// Carried so `/cache stats` can surface it without reaching
-        /// into the engine's PrefixStabilityManager.
         pinned_combined_hash: String,
     },
 
     // === Notification Events ===
-    /// A notification that the TUI should surface in a platform-appropriate
-    /// way (taskbar indicator, title animation, etc.).
+    /// A notification that the frontend should surface in a platform-
+    /// appropriate way (taskbar indicator, title animation, etc.).
     Notification {
-        kind: codewhale_engine::NotificationKind,
+        kind: NotificationKind,
         message: String,
     },
-}
-
-impl Event {
-    /// Create an error event from a categorized envelope. The envelope's own
-    /// `recoverable` flag controls whether the UI flips into offline mode.
-    pub fn error(envelope: ErrorEnvelope) -> Self {
-        let recoverable = envelope.recoverable;
-        Event::Error {
-            envelope,
-            recoverable,
-        }
-    }
-
-    /// Create a new status event
-    pub fn status(message: impl Into<String>) -> Self {
-        Event::Status {
-            message: message.into(),
-        }
-    }
 }

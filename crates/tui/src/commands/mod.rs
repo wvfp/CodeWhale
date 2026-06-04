@@ -720,7 +720,7 @@ pub fn persist_root_string_key(
     config::persist_root_string_key(config_path, key, value)
 }
 
-pub fn switch_mode(app: &mut App, mode: crate::tui::app::AppMode) -> String {
+pub fn switch_mode(app: &mut App, mode: codewhale_engine::AppMode) -> String {
     config::switch_mode(app, mode)
 }
 

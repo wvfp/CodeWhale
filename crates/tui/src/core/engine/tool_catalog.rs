@@ -14,7 +14,7 @@ use serde_json::{Value, json};
 use crate::config::ApiProvider;
 use crate::models::Tool;
 use crate::tools::spec::{ToolError, ToolResult, optional_u64, required_str};
-use crate::tui::app::AppMode;
+use codewhale_engine::AppMode;
 
 use crate::dependencies::ExternalTool;
 

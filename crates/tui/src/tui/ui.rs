@@ -46,7 +46,7 @@ use crate::config::{
     UpdateConfig, save_provider_auth_mode_for,
 };
 use crate::config_ui::{self, ConfigUiMode, WebConfigSession, WebConfigSessionEvent};
-use crate::core::engine::{EngineConfig, EngineHandle, spawn_engine};
+use crate::core::engine::{EngineConfig, TuiEngineHandle, spawn_engine};
 use crate::core::events::Event as EngineEvent;
 use crate::core::ops::{Op, USER_SHELL_TOOL_ID_PREFIX};
 use crate::hooks::{HookEvent, HookExecutor};
@@ -1091,7 +1091,7 @@ async fn run_event_loop(
     terminal: &mut AppTerminal,
     app: &mut App,
     config: &mut Config,
-    mut engine_handle: EngineHandle,
+    mut engine_handle: TuiEngineHandle,
     task_manager: SharedTaskManager,
     event_broker: &EventBroker,
     translation_client: Option<Arc<DeepSeekClient>>,
@@ -1301,6 +1301,9 @@ async fn run_event_loop(
                     continue;
                 }
                 record_turn_activity(app, &event, Instant::now());
+                // Clone for ShellState dual-write (Elm reducer pattern).
+                // The original event is consumed by the match below.
+                let event_for_shell = event.clone();
                 match event {
                     EngineEvent::MessageStarted { .. } => {
                         // Assistant text starting after parallel tool work
@@ -2037,6 +2040,23 @@ async fn run_event_loop(
                             }
                         }
                     }
+                    EngineEvent::Notification { kind, message } => {
+                        use codewhale_engine::NotificationKind as NK;
+                        match kind {
+                            NK::TaskbarBusy => {
+                                crate::tui::notifications::set_taskbar_progress_busy();
+                            }
+                            NK::TaskbarIdle => {
+                                crate::tui::notifications::clear_taskbar_progress();
+                            }
+                            NK::TitleAnimationStart => {
+                                crate::tui::notifications::start_title_animation(&message);
+                            }
+                            NK::TitleAnimationStop => {
+                                crate::tui::notifications::stop_title_animation();
+                            }
+                        }
+                    }
                     EngineEvent::CapacityDecision { .. } => {
                         // Telemetry-only event. Surface actual interventions and failures
                         // instead of replacing the footer with no-op guardrail chatter.
@@ -2361,6 +2381,57 @@ async fn run_event_loop(
                             }
                             app.status_message =
                                 Some(format!("Sandbox blocked {tool_name}: {denial_reason}"));
+                        }
+                    }
+                }
+                // --- ShellState dual-write (Elm reducer pattern) ---
+                // After the existing TUI event handling, sync ShellState
+                // so it mirrors the same event. This does NOT replace the
+                // existing logic — it's a parallel, UI-agnostic state layer.
+                if let Some(engine_event) = tui_event_to_engine_event(&event_for_shell) {
+                    let shell_effects = codewhale_shell::reduce(&mut app.shell_state, engine_event);
+                    for effect in shell_effects {
+                        match effect {
+                            codewhale_shell::ShellEffect::SendOp(op) => {
+                                // Map EngineOp to TUI's Op type and send through
+                                // the engine handle. EngineOp is the UI-agnostic
+                                // operation enum; TUI uses its own Op internally.
+                                let tui_op = engine_op_to_tui_op(op);
+                                if let Err(e) = engine_handle.send(tui_op).await {
+                                    tracing::warn!("ShellEffect::SendOp failed: {}", e);
+                                }
+                            }
+                            codewhale_shell::ShellEffect::SubmitApproval { id, approved } => {
+                                let result = if approved {
+                                    engine_handle.approve_tool_call(id).await
+                                } else {
+                                    engine_handle.deny_tool_call(id).await
+                                };
+                                if let Err(e) = result {
+                                    tracing::warn!("ShellEffect::SubmitApproval failed: {}", e);
+                                }
+                            }
+                            codewhale_shell::ShellEffect::SubmitUserInput { id, response } => {
+                                let payload = crate::tools::user_input::UserInputResponse {
+                                    answers: vec![crate::tools::user_input::UserInputAnswer {
+                                        id: "response".to_string(),
+                                        label: "Response".to_string(),
+                                        value: response,
+                                    }],
+                                };
+                                if let Err(e) = engine_handle.submit_user_input(id, payload).await {
+                                    tracing::warn!("ShellEffect::SubmitUserInput failed: {}", e);
+                                }
+                            }
+                            codewhale_shell::ShellEffect::RequestRedraw => {
+                                app.needs_redraw = true;
+                            }
+                            codewhale_shell::ShellEffect::PersistCheckpoint => {
+                                // Persistence is handled separately by TUI's existing mechanism
+                            }
+                            codewhale_shell::ShellEffect::Notify { .. } => {
+                                // TUI-specific notification handling already done in event loop
+                            }
                         }
                     }
                 }
@@ -4729,7 +4800,7 @@ const INITIAL_PROMPT_DEFERRED_STATUS: &str = "Initial prompt ready; complete set
 async fn submit_initial_input_if_ready(
     app: &mut App,
     config: &Config,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
 ) -> Result<()> {
     if !app.auto_submit_initial_input {
         return Ok(());
@@ -4794,7 +4865,7 @@ fn queued_message_content_for_app(
 async fn dispatch_user_message(
     app: &mut App,
     config: &Config,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     mut message: QueuedMessage,
 ) -> Result<()> {
     // #1364: run mutable `message_submit` hooks before dispatch. Hooks see the
@@ -4973,11 +5044,387 @@ async fn dispatch_user_message(
     Ok(())
 }
 
-async fn sync_mode_update(engine_handle: &EngineHandle, mode: AppMode) {
+async fn sync_mode_update(engine_handle: &TuiEngineHandle, mode: AppMode) {
     let _ = engine_handle.send(Op::ChangeMode { mode }).await;
 }
 
-async fn apply_mode_update(app: &mut App, engine_handle: &EngineHandle, mode: AppMode) -> bool {
+/// Convert the TUI's internal `Event` into the UI-agnostic `EngineEvent`.
+///
+/// The TUI uses its own `Event` type with TUI-specific field types
+/// (e.g. `ToolResult`/`ToolError`, `Usage`, `Vec<Message>`), while
+/// `ShellState::reduce` consumes the serializable `EngineEvent` from
+/// the engine crate. This function bridges the two by converting
+/// events that have a clear mapping; events that cannot be losslessly
+/// converted return `None` and the ShellState simply skips them.
+fn tui_event_to_engine_event(event: &EngineEvent) -> Option<codewhale_engine::EngineEvent> {
+    match event {
+        EngineEvent::MessageStarted { index } => Some(
+            codewhale_engine::EngineEvent::MessageStarted { index: *index },
+        ),
+        EngineEvent::MessageDelta { index, content } => Some(
+            codewhale_engine::EngineEvent::MessageDelta {
+                index: *index,
+                content: content.clone(),
+            },
+        ),
+        EngineEvent::MessageComplete { index } => Some(
+            codewhale_engine::EngineEvent::MessageComplete { index: *index },
+        ),
+        EngineEvent::ThinkingStarted { index } => Some(
+            codewhale_engine::EngineEvent::ThinkingStarted { index: *index },
+        ),
+        EngineEvent::ThinkingDelta { index, content } => Some(
+            codewhale_engine::EngineEvent::ThinkingDelta {
+                index: *index,
+                content: content.clone(),
+            },
+        ),
+        EngineEvent::ThinkingComplete { index } => Some(
+            codewhale_engine::EngineEvent::ThinkingComplete { index: *index },
+        ),
+        EngineEvent::ToolCallStarted { id, name, input } => Some(
+            codewhale_engine::EngineEvent::ToolCallStarted {
+                id: id.clone(),
+                name: name.clone(),
+                input: input.clone(),
+            },
+        ),
+        EngineEvent::ToolCallProgress { id, output } => Some(
+            codewhale_engine::EngineEvent::ToolCallProgress {
+                id: id.clone(),
+                output: output.clone(),
+            },
+        ),
+        EngineEvent::ToolCallComplete { id, name, result } => {
+            let engine_result = match result {
+                Ok(tool_result) => Ok(tool_result.clone()),
+                Err(tool_error) => Err(codewhale_engine::ToolErrorPayload::from(tool_error)),
+            };
+            Some(codewhale_engine::EngineEvent::ToolCallComplete {
+                id: id.clone(),
+                name: name.clone(),
+                result: engine_result,
+            })
+        }
+        EngineEvent::TurnStarted { turn_id } => Some(
+            codewhale_engine::EngineEvent::TurnStarted { turn_id: turn_id.clone() },
+        ),
+        EngineEvent::TurnComplete { status, error, .. } => Some(
+            codewhale_engine::EngineEvent::TurnComplete {
+                usage: serde_json::Value::Null,
+                status: match status {
+                    crate::core::events::TurnOutcomeStatus::Completed => {
+                        codewhale_engine::TurnOutcomeStatus::Completed
+                    }
+                    crate::core::events::TurnOutcomeStatus::Interrupted => {
+                        codewhale_engine::TurnOutcomeStatus::Interrupted
+                    }
+                    crate::core::events::TurnOutcomeStatus::Failed => {
+                        codewhale_engine::TurnOutcomeStatus::Failed
+                    }
+                },
+                error: error.clone(),
+                tool_catalog: None,
+                base_url: None,
+            },
+        ),
+        EngineEvent::CompactionStarted { id, auto, message } => Some(
+            codewhale_engine::EngineEvent::CompactionStarted {
+                id: id.clone(),
+                auto: *auto,
+                message: message.clone(),
+            },
+        ),
+        EngineEvent::CompactionCompleted { id, auto, message, messages_before, messages_after } => Some(
+            codewhale_engine::EngineEvent::CompactionCompleted {
+                id: id.clone(),
+                auto: *auto,
+                message: message.clone(),
+                messages_before: *messages_before,
+                messages_after: *messages_after,
+            },
+        ),
+        EngineEvent::PurgeStarted { message } => Some(
+            codewhale_engine::EngineEvent::PurgeStarted { message: message.clone() },
+        ),
+        EngineEvent::PurgeCompleted { messages_before, messages_after, removed_count, replaced_count, message } => Some(
+            codewhale_engine::EngineEvent::PurgeCompleted {
+                messages_before: *messages_before,
+                messages_after: *messages_after,
+                removed_count: *removed_count,
+                replaced_count: *replaced_count,
+                message: message.clone(),
+            },
+        ),
+        EngineEvent::PurgeFailed { message } => Some(
+            codewhale_engine::EngineEvent::PurgeFailed { message: message.clone() },
+        ),
+        EngineEvent::CompactionFailed { id, auto, message } => Some(
+            codewhale_engine::EngineEvent::CompactionFailed {
+                id: id.clone(),
+                auto: *auto,
+                message: message.clone(),
+            },
+        ),
+        EngineEvent::CapacityDecision { session_id, turn_id, h_hat, c_hat, slack, min_slack, violation_ratio, p_fail, risk_band, action, cooldown_blocked, reason } => Some(
+            codewhale_engine::EngineEvent::CapacityDecision {
+                session_id: session_id.clone(),
+                turn_id: turn_id.clone(),
+                h_hat: *h_hat,
+                c_hat: *c_hat,
+                slack: *slack,
+                min_slack: *min_slack,
+                violation_ratio: *violation_ratio,
+                p_fail: *p_fail,
+                risk_band: risk_band.clone(),
+                action: action.clone(),
+                cooldown_blocked: *cooldown_blocked,
+                reason: reason.clone(),
+            },
+        ),
+        EngineEvent::CapacityIntervention { session_id, turn_id, action, before_prompt_tokens, after_prompt_tokens, compaction_size_reduction, replay_outcome, replan_performed } => Some(
+            codewhale_engine::EngineEvent::CapacityIntervention {
+                session_id: session_id.clone(),
+                turn_id: turn_id.clone(),
+                action: action.clone(),
+                before_prompt_tokens: *before_prompt_tokens,
+                after_prompt_tokens: *after_prompt_tokens,
+                compaction_size_reduction: *compaction_size_reduction,
+                replay_outcome: replay_outcome.clone(),
+                replan_performed: *replan_performed,
+            },
+        ),
+        EngineEvent::CapacityMemoryPersistFailed { session_id, turn_id, action, error } => Some(
+            codewhale_engine::EngineEvent::CapacityMemoryPersistFailed {
+                session_id: session_id.clone(),
+                turn_id: turn_id.clone(),
+                action: action.clone(),
+                error: error.clone(),
+            },
+        ),
+        EngineEvent::CoherenceState { state: _, label, description, reason } => Some(
+            codewhale_engine::EngineEvent::CoherenceState {
+                state: codewhale_engine::events::CoherenceState::default(),
+                label: label.clone(),
+                description: description.clone(),
+                reason: reason.clone(),
+            },
+        ),
+        EngineEvent::AgentSpawned { id, prompt } => Some(
+            codewhale_engine::EngineEvent::AgentSpawned {
+                id: id.clone(),
+                prompt: prompt.clone(),
+            },
+        ),
+        EngineEvent::AgentProgress { id, status } => Some(
+            codewhale_engine::EngineEvent::AgentProgress {
+                id: id.clone(),
+                status: status.clone(),
+            },
+        ),
+        EngineEvent::AgentComplete { id, result } => Some(
+            codewhale_engine::EngineEvent::AgentComplete {
+                id: id.clone(),
+                result: result.clone(),
+            },
+        ),
+        EngineEvent::AgentList { agents } => Some(
+            codewhale_engine::EngineEvent::AgentList {
+                agents: serde_json::to_value(agents).unwrap_or(serde_json::Value::Null),
+            },
+        ),
+        EngineEvent::SubAgentMailbox { seq, message } => Some(
+            codewhale_engine::EngineEvent::SubAgentMailbox {
+                seq: *seq,
+                message: serde_json::to_value(message).unwrap_or(serde_json::Value::Null),
+            },
+        ),
+        EngineEvent::Error { envelope, recoverable } => Some(
+            codewhale_engine::EngineEvent::Error {
+                envelope: codewhale_engine::events::ErrorEnvelope {
+                    category: match envelope.category {
+                        crate::error_taxonomy::ErrorCategory::Network => codewhale_engine::events::ErrorCategory::Network,
+                        crate::error_taxonomy::ErrorCategory::Authentication => codewhale_engine::events::ErrorCategory::Authentication,
+                        crate::error_taxonomy::ErrorCategory::Authorization => codewhale_engine::events::ErrorCategory::Authorization,
+                        crate::error_taxonomy::ErrorCategory::RateLimit => codewhale_engine::events::ErrorCategory::RateLimit,
+                        crate::error_taxonomy::ErrorCategory::Timeout => codewhale_engine::events::ErrorCategory::Timeout,
+                        crate::error_taxonomy::ErrorCategory::InvalidInput => codewhale_engine::events::ErrorCategory::InvalidInput,
+                        crate::error_taxonomy::ErrorCategory::Parse => codewhale_engine::events::ErrorCategory::Parse,
+                        crate::error_taxonomy::ErrorCategory::Tool => codewhale_engine::events::ErrorCategory::Tool,
+                        crate::error_taxonomy::ErrorCategory::State => codewhale_engine::events::ErrorCategory::State,
+                        crate::error_taxonomy::ErrorCategory::Internal => codewhale_engine::events::ErrorCategory::Internal,
+                    },
+                    severity: match envelope.severity {
+                        crate::error_taxonomy::ErrorSeverity::Info => codewhale_engine::events::ErrorSeverity::Info,
+                        crate::error_taxonomy::ErrorSeverity::Warning => codewhale_engine::events::ErrorSeverity::Warning,
+                        crate::error_taxonomy::ErrorSeverity::Error => codewhale_engine::events::ErrorSeverity::Error,
+                        crate::error_taxonomy::ErrorSeverity::Critical => codewhale_engine::events::ErrorSeverity::Critical,
+                    },
+                    recoverable: envelope.recoverable,
+                    code: envelope.code.clone(),
+                    message: envelope.message.clone(),
+                },
+                recoverable: *recoverable,
+            },
+        ),
+        EngineEvent::Status { message } => Some(
+            codewhale_engine::EngineEvent::Status { message: message.clone() },
+        ),
+        EngineEvent::PauseEvents { .. } => Some(
+            codewhale_engine::EngineEvent::PauseEvents,
+        ),
+        EngineEvent::ResumeEvents => Some(
+            codewhale_engine::EngineEvent::ResumeEvents,
+        ),
+        EngineEvent::ApprovalRequired { id, tool_name, description, input, approval_key, approval_grouping_key, intent_summary } => Some(
+            codewhale_engine::EngineEvent::ApprovalRequired {
+                id: id.clone(),
+                tool_name: tool_name.clone(),
+                description: description.clone(),
+                input: input.clone(),
+                approval_key: approval_key.clone(),
+                approval_grouping_key: approval_grouping_key.clone(),
+                intent_summary: intent_summary.clone(),
+            },
+        ),
+        EngineEvent::UserInputRequired { id, request } => Some(
+            codewhale_engine::EngineEvent::UserInputRequired {
+                id: id.clone(),
+                request: serde_json::to_value(request).unwrap_or(serde_json::Value::Null),
+            },
+        ),
+        EngineEvent::SessionUpdated { session_id, messages, system_prompt, model, workspace } => Some(
+            codewhale_engine::EngineEvent::SessionUpdated {
+                session_id: session_id.clone(),
+                messages: serde_json::to_value(messages).unwrap_or(serde_json::Value::Null),
+                system_prompt: serde_json::to_value(system_prompt).unwrap_or(serde_json::Value::Null),
+                model: model.clone(),
+                workspace: workspace.clone(),
+            },
+        ),
+        EngineEvent::ElevationRequired { tool_id, tool_name, command, denial_reason, blocked_network, blocked_write } => Some(
+            codewhale_engine::EngineEvent::ElevationRequired {
+                tool_id: tool_id.clone(),
+                tool_name: tool_name.clone(),
+                command: command.clone(),
+                denial_reason: denial_reason.clone(),
+                blocked_network: *blocked_network,
+                blocked_write: *blocked_write,
+            },
+        ),
+        EngineEvent::PrefixCacheChange { description, system_prompt_changed, tools_changed, stability_pct, changed, pinned_combined_hash } => Some(
+            codewhale_engine::EngineEvent::PrefixCacheChange {
+                description: description.clone(),
+                system_prompt_changed: *system_prompt_changed,
+                tools_changed: *tools_changed,
+                stability_pct: *stability_pct,
+                changed: *changed,
+                pinned_combined_hash: pinned_combined_hash.clone(),
+            },
+        ),
+        EngineEvent::Notification { kind, message } => Some(
+            codewhale_engine::EngineEvent::Notification {
+                kind: kind.clone(),
+                message: message.clone(),
+            },
+        ),
+    }
+}
+
+/// Convert a UI-agnostic `EngineOp` into the TUI's internal `Op` type.
+///
+/// This bridges the gap between the shell layer (which uses `EngineOp`)
+/// and the TUI engine handle (which consumes `Op`). Not all `EngineOp`
+/// variants have a 1:1 mapping — those that cannot be converted are
+/// logged and dropped.
+fn engine_op_to_tui_op(op: codewhale_engine::EngineOp) -> Op {
+    match op {
+        codewhale_engine::EngineOp::SendMessage {
+            content,
+            mode,
+            model,
+            goal_objective,
+            reasoning_effort,
+            reasoning_effort_auto,
+            auto_model,
+            allow_shell,
+            trust_mode,
+            auto_approve,
+            approval_mode,
+            translation_enabled,
+            show_thinking,
+            allowed_tools,
+            hook_executor_name,
+        } => Op::SendMessage {
+            content,
+            mode,
+            model,
+            goal_objective,
+            reasoning_effort,
+            reasoning_effort_auto,
+            auto_model,
+            allow_shell,
+            trust_mode,
+            auto_approve,
+            approval_mode,
+            translation_enabled,
+            show_thinking,
+            allowed_tools,
+            hook_executor: hook_executor_name.map(|_| {
+                std::sync::Arc::new(crate::hooks::HookExecutor::disabled())
+            }),
+        },
+        codewhale_engine::EngineOp::RunShellCommand {
+            command,
+            mode,
+            trust_mode,
+            auto_approve,
+            approval_mode,
+        } => Op::RunShellCommand {
+            command,
+            mode,
+            trust_mode,
+            auto_approve,
+            approval_mode,
+        },
+        codewhale_engine::EngineOp::CancelRequest => Op::CancelRequest,
+        codewhale_engine::EngineOp::ApproveToolCall { id } => Op::ApproveToolCall { id },
+        codewhale_engine::EngineOp::DenyToolCall { id } => Op::DenyToolCall { id },
+        codewhale_engine::EngineOp::SpawnSubAgent { prompt } => Op::SpawnSubAgent { prompt },
+        codewhale_engine::EngineOp::ListSubAgents => Op::ListSubAgents,
+        codewhale_engine::EngineOp::ChangeMode { mode } => Op::ChangeMode { mode },
+        codewhale_engine::EngineOp::SetModel { model, mode } => Op::SetModel { model, mode },
+        codewhale_engine::EngineOp::SetCompaction { config } => Op::SetCompaction {
+            config: crate::compaction::CompactionConfig {
+                enabled: config.enabled,
+                token_threshold: config.token_threshold,
+                model: config.model,
+                cache_summary: config.cache_summary,
+            },
+        },
+        codewhale_engine::EngineOp::SyncSession {
+            session_id,
+            messages,
+            system_prompt,
+            system_prompt_override,
+            model,
+            workspace,
+        } => Op::SyncSession {
+            session_id,
+            messages: serde_json::from_value(messages).unwrap_or_default(),
+            system_prompt: serde_json::from_value(system_prompt).ok(),
+            system_prompt_override,
+            model,
+            workspace,
+        },
+        codewhale_engine::EngineOp::CompactContext => Op::CompactContext,
+        codewhale_engine::EngineOp::PurgeContext => Op::PurgeContext,
+        codewhale_engine::EngineOp::EditLastTurn { new_message } => Op::EditLastTurn { new_message },
+        codewhale_engine::EngineOp::Shutdown => Op::Shutdown,
+    }
+}
+
+async fn apply_mode_update(app: &mut App, engine_handle: &TuiEngineHandle, mode: AppMode) -> bool {
     if app.set_mode(mode) {
         sync_mode_update(engine_handle, mode).await;
         true
@@ -4988,7 +5435,7 @@ async fn apply_mode_update(app: &mut App, engine_handle: &EngineHandle, mode: Ap
 
 async fn handle_bang_shell_input(
     app: &mut App,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     input: &str,
 ) -> Result<bool> {
     let command = match shell_command_from_bang_input(input) {
@@ -5018,7 +5465,7 @@ fn is_model_visible_tool_call(id: &str) -> bool {
 }
 
 async fn apply_model_and_compaction_update(
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     compaction: crate::compaction::CompactionConfig,
     mode: AppMode,
 ) {
@@ -5037,7 +5484,7 @@ async fn drain_web_config_events(
     web_config_session: &mut Option<WebConfigSession>,
     app: &mut App,
     config: &mut Config,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
 ) -> bool {
     let Some(session) = web_config_session.as_mut() else {
         return true;
@@ -5117,7 +5564,7 @@ async fn drain_web_config_events(
 #[allow(clippy::too_many_arguments)]
 async fn apply_model_picker_choice(
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     config: &mut Config,
     model: String,
     target_provider: Option<ApiProvider>,
@@ -5232,7 +5679,7 @@ async fn apply_model_picker_choice(
 
 async fn apply_picker_effort_choice(
     app: &mut App,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     effort: ReasoningEffort,
     previous_effort: ReasoningEffort,
 ) {
@@ -5273,7 +5720,7 @@ async fn apply_picker_effort_choice(
 /// will be provider-prefixed by `Config::default_model`).
 async fn switch_provider(
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     config: &mut Config,
     target: ApiProvider,
     model_override: Option<String>,
@@ -5706,7 +6153,7 @@ pub(crate) fn open_context_inspector(app: &mut App) {
 async fn apply_command_result(
     terminal: &mut AppTerminal,
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     task_manager: &SharedTaskManager,
     config: &mut Config,
     #[cfg_attr(not(feature = "web"), allow(unused_variables))] web_config_session: &mut Option<
@@ -6209,7 +6656,7 @@ async fn sync_runtime_workspace_state(task_manager: &SharedTaskManager, workspac
 
 async fn switch_workspace(
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     task_manager: &SharedTaskManager,
     config: &Config,
     workspace: PathBuf,
@@ -6445,7 +6892,7 @@ fn handle_shell_job_action(app: &mut App, action: crate::tui::app::ShellJobActio
 async fn execute_command_input(
     terminal: &mut AppTerminal,
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     task_manager: &SharedTaskManager,
     config: &mut Config,
     web_config_session: &mut Option<WebConfigSession>,
@@ -6487,7 +6934,7 @@ async fn execute_command_input(
 
 async fn steer_user_message(
     app: &mut App,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     message: QueuedMessage,
 ) -> Result<()> {
     let cwd = std::env::current_dir().ok();
@@ -6542,7 +6989,7 @@ async fn queue_follow_up(app: &mut App, message: QueuedMessage) -> Result<()> {
 async fn submit_or_steer_message(
     app: &mut App,
     config: &Config,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     message: QueuedMessage,
 ) -> Result<()> {
     match app.decide_submit_disposition() {
@@ -6652,7 +7099,7 @@ fn parse_plan_choice(input: &str) -> Option<PlanChoice> {
 async fn apply_plan_choice(
     app: &mut App,
     config: &Config,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     choice: PlanChoice,
 ) -> Result<()> {
     match choice {
@@ -6706,7 +7153,7 @@ async fn apply_plan_choice(
 async fn handle_plan_choice(
     app: &mut App,
     config: &Config,
-    engine_handle: &EngineHandle,
+    engine_handle: &TuiEngineHandle,
     input: &str,
 ) -> Result<bool> {
     if !app.plan_prompt_pending {
@@ -7250,7 +7697,7 @@ async fn handle_view_events(
     app: &mut App,
     config: &mut Config,
     task_manager: &SharedTaskManager,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     web_config_session: &mut Option<WebConfigSession>,
     events: Vec<ViewEvent>,
 ) -> Result<bool> {
@@ -7659,7 +8106,7 @@ struct ApprovalDecisionEvent {
 
 async fn apply_approval_decision(
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     event: ApprovalDecisionEvent,
 ) {
     if event.decision == ReviewDecision::ApprovedForSession {
@@ -7854,7 +8301,7 @@ fn apply_backtrack(app: &mut App, depth: usize) {
 /// in-memory config so the engine can see it, then switch to the provider.
 async fn apply_provider_picker_api_key(
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     config: &mut Config,
     provider: ApiProvider,
     api_key: String,
@@ -7918,7 +8365,7 @@ async fn apply_provider_picker_api_key(
 
 async fn apply_provider_picker_auth_mode(
     app: &mut App,
-    engine_handle: &mut EngineHandle,
+    engine_handle: &mut TuiEngineHandle,
     config: &mut Config,
     provider: ApiProvider,
     auth_mode: &str,

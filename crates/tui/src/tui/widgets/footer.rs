@@ -17,7 +17,8 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::localization::{Locale, MessageId, tr};
 use crate::palette;
-use crate::tui::app::{App, AppMode};
+use crate::tui::app::App;
+use codewhale_engine::AppMode;
 
 use super::Renderable;
 
@@ -705,7 +706,8 @@ mod tests {
     use crate::config::Config;
     use crate::localization::Locale;
     use crate::palette;
-    use crate::tui::app::{App, AppMode, TuiOptions};
+    use crate::tui::app::{App, TuiOptions};
+    use codewhale_engine::AppMode;
     use ratatui::{
         buffer::Buffer,
         layout::Rect,

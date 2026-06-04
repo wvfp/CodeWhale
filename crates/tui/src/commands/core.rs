@@ -8,7 +8,8 @@ use crate::config::{
     normalize_model_name_for_provider, provider_passes_model_through,
 };
 use crate::localization::{MessageId, tr};
-use crate::tui::app::{App, AppAction, AppMode, ReasoningEffort};
+use crate::tui::app::{App, AppAction, ReasoningEffort};
+use codewhale_engine::AppMode;
 use crate::tui::views::{HelpView, ModalKind, SubAgentsView, subagent_view_agents};
 
 use super::CommandResult;
@@ -481,7 +482,8 @@ mod tests {
     use crate::client::PromptInspection;
     use crate::config::Config;
     use crate::models::Message;
-    use crate::tui::app::{App, AppMode, TuiOptions, TurnCacheRecord};
+    use crate::tui::app::{App, TuiOptions, TurnCacheRecord};
+    use codewhale_engine::AppMode;
     use crate::tui::history::HistoryCell;
     use std::ffi::OsString;
     use std::path::PathBuf;

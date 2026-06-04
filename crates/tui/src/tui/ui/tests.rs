@@ -2043,14 +2043,14 @@ async fn model_change_update_syncs_engine_model_before_compaction() {
 #[tokio::test]
 async fn mode_change_update_notifies_engine() {
     let mut app = create_test_app();
-    let _ = app.set_mode(crate::tui::app::AppMode::Plan);
+    let _ = app.set_mode(codewhale_engine::AppMode::Plan);
     let mut engine = crate::core::engine::mock_engine_handle();
 
-    assert!(apply_mode_update(&mut app, &engine.handle, crate::tui::app::AppMode::Yolo).await);
+    assert!(apply_mode_update(&mut app, &engine.handle, codewhale_engine::AppMode::Yolo).await);
 
     match engine.rx_op.recv().await.expect("change mode op") {
         crate::core::ops::Op::ChangeMode { mode } => {
-            assert_eq!(mode, crate::tui::app::AppMode::Yolo);
+            assert_eq!(mode, codewhale_engine::AppMode::Yolo);
         }
         other => panic!("expected ChangeMode, got {other:?}"),
     }
@@ -3490,7 +3490,7 @@ fn footer_status_line_spans_show_mode_and_model_idle_and_active() {
     let mut app = create_test_app();
     app.model = "deepseek-v4-flash".to_string();
     // Pin Agent mode regardless of user settings on the host machine.
-    let _ = app.set_mode(crate::tui::app::AppMode::Agent);
+    let _ = app.set_mode(codewhale_engine::AppMode::Agent);
 
     let idle = spans_text(&footer_status_line_spans(&app, 60));
     assert!(idle.contains("agent"));

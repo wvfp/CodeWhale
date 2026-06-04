@@ -1,4 +1,4 @@
-//! Public `EngineHandle` methods.
+//! Public `TuiEngineHandle` methods.
 //!
 //! The struct itself lives next door in `engine.rs` because two
 //! construction sites (`Engine::new` and the test-only
@@ -11,9 +11,9 @@
 use anyhow::Result;
 
 use super::approval::{ApprovalDecision, UserInputDecision};
-use super::{CancelReason, EngineHandle, Op, UserInputResponse};
+use super::{CancelReason, Op, TuiEngineHandle, UserInputResponse};
 
-impl EngineHandle {
+impl TuiEngineHandle {
     /// Send an operation to the engine
     pub async fn send(&self, op: Op) -> Result<()> {
         self.tx_op.send(op).await?;

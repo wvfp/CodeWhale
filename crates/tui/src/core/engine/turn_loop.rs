@@ -42,8 +42,14 @@ impl Engine {
     ) -> (TurnOutcomeStatus, Option<String>) {
         // Signal to the terminal / taskbar that a turn is in progress
         // (OSC 9 ; 4 indeterminate progress + title spinner).
-        crate::tui::notifications::set_taskbar_progress_busy();
-        crate::tui::notifications::start_title_animation("CodeWhale");
+        let _ = self.tx_event.send(Event::Notification {
+            kind: codewhale_engine::NotificationKind::TaskbarBusy,
+            message: String::new(),
+        }).await;
+        let _ = self.tx_event.send(Event::Notification {
+            kind: codewhale_engine::NotificationKind::TitleAnimationStart,
+            message: "CodeWhale".to_string(),
+        }).await;
 
         let client = self
             .deepseek_client

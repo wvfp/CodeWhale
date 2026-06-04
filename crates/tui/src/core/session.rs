@@ -6,7 +6,7 @@ use crate::models::{Message, SystemPrompt, Usage};
 use crate::prefix_cache::PrefixStabilityManager;
 use crate::project_context::{ProjectContext, load_project_context_with_parents};
 use crate::prompt_zones::FrozenPrefix;
-use crate::tui::approval::ApprovalMode;
+use codewhale_engine::ApprovalMode;
 use crate::working_set::WorkingSet;
 use novel::model::graph::NarrativeGraph;
 use novel::model::project::NovelProject;

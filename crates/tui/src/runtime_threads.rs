@@ -28,7 +28,7 @@ use uuid::Uuid;
 use crate::compaction::CompactionConfig;
 use crate::config::{Config, DEFAULT_TEXT_MODEL, MAX_SUBAGENTS};
 use crate::core::coherence::CoherenceState;
-use crate::core::engine::{EngineConfig, EngineHandle, spawn_engine};
+use crate::core::engine::{EngineConfig, TuiEngineHandle, spawn_engine};
 use crate::core::events::{Event as EngineEvent, TurnOutcomeStatus};
 use crate::core::ops::Op;
 use crate::models::{
@@ -38,7 +38,7 @@ use crate::models::{
 use crate::tools::plan::new_shared_plan_state;
 use crate::tools::subagent::SubAgentStatus;
 use crate::tools::todo::new_shared_todo_list;
-use crate::tui::app::AppMode;
+use codewhale_engine::AppMode;
 
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
 const MAX_ACTIVE_THREADS_DEFAULT: usize = 8;
@@ -693,7 +693,7 @@ struct ActiveTurnState {
 
 #[derive(Clone)]
 struct ActiveThreadState {
-    engine: EngineHandle,
+    engine: TuiEngineHandle,
     active_turn: Option<ActiveTurnState>,
 }
 
@@ -1656,9 +1656,9 @@ impl RuntimeThreadManager {
                 allowed_tools: None,
                 hook_executor: None,
                 approval_mode: if auto_approve {
-                    crate::tui::approval::ApprovalMode::Auto
+                    codewhale_engine::ApprovalMode::Auto
                 } else {
-                    crate::tui::approval::ApprovalMode::Suggest
+                    codewhale_engine::ApprovalMode::Suggest
                 },
             })
             .await
@@ -1931,7 +1931,7 @@ impl RuntimeThreadManager {
         self.store.events_since(thread_id, since_seq)
     }
 
-    async fn ensure_engine_loaded(&self, thread: &ThreadRecord) -> Result<EngineHandle> {
+    async fn ensure_engine_loaded(&self, thread: &ThreadRecord) -> Result<TuiEngineHandle> {
         {
             let mut active = self.active.lock().await;
             if let Some(engine) = active
@@ -2118,7 +2118,7 @@ impl RuntimeThreadManager {
         &self,
         thread_id: String,
         turn_id: String,
-        engine: EngineHandle,
+        engine: TuiEngineHandle,
     ) -> Result<()> {
         let mut current_message_item: Option<(String, String)> = None;
         let mut current_reasoning_item: Option<(String, String)> = None;
@@ -3092,7 +3092,7 @@ impl RuntimeThreadManager {
     pub(crate) async fn install_test_engine(
         &self,
         thread_id: &str,
-        engine: EngineHandle,
+        engine: TuiEngineHandle,
     ) -> Result<()> {
         let _ = self.get_thread(thread_id).await?;
         let mut active = self.active.lock().await;
@@ -3118,7 +3118,7 @@ fn touch_lru(lru: &mut VecDeque<String>, thread_id: &str) {
 fn enforce_lru_capacity(
     active: &mut ActiveThreads,
     max_active_threads: usize,
-) -> Vec<EngineHandle> {
+) -> Vec<TuiEngineHandle> {
     let mut evicted = Vec::new();
     if max_active_threads == 0 || active.engines.len() < max_active_threads {
         return evicted;

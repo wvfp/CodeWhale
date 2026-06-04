@@ -12,7 +12,7 @@ use ratatui::{
 use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::palette;
-use crate::tui::app::AppMode;
+use codewhale_engine::AppMode;
 
 use super::Renderable;
 
@@ -603,7 +603,7 @@ impl Renderable for HeaderWidget<'_> {
 mod tests {
     use super::{HeaderData, HeaderWidget, Renderable};
     use crate::palette;
-    use crate::tui::app::AppMode;
+    use codewhale_engine::AppMode;
     use ratatui::{buffer::Buffer, layout::Rect};
 
     fn render_header(data: HeaderData<'_>, width: u16) -> String {

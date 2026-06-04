@@ -5643,7 +5643,7 @@ async fn run_exec_agent(
     };
     use crate::tools::plan::new_shared_plan_state;
     use crate::tools::todo::new_shared_todo_list;
-    use crate::tui::app::AppMode;
+    use codewhale_engine::AppMode;
 
     let route = resolve_cli_auto_route(config, model, prompt).await;
     let auto_model = route.auto_model;
@@ -5789,12 +5789,12 @@ async fn run_exec_agent(
             translation_enabled: false,
             show_thinking: settings.show_thinking,
             approval_mode: if auto_approve {
-                crate::tui::approval::ApprovalMode::Auto
+                codewhale_engine::ApprovalMode::Auto
             } else {
                 config
                     .approval_policy
                     .as_deref()
-                    .and_then(crate::tui::approval::ApprovalMode::from_config_value)
+                    .and_then(codewhale_engine::ApprovalMode::from_config_value)
                     .unwrap_or_default()
             },
         })

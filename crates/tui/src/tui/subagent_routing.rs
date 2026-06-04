@@ -4,7 +4,8 @@ use std::time::Instant;
 
 use crate::task_manager::{TaskRecord, TaskStatus, TaskSummary};
 use crate::tools::subagent::{MailboxMessage, SubAgentResult, SubAgentStatus};
-use crate::tui::app::{App, AppMode, TaskPanelEntry};
+use crate::tui::app::{App, TaskPanelEntry};
+use codewhale_engine::AppMode;
 use crate::tui::history::{HistoryCell, SubAgentCell, summarize_tool_output};
 use crate::tui::pager::PagerView;
 use crate::tui::widgets::agent_card::{

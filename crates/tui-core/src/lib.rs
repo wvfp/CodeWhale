@@ -1,230 +1,287 @@
-/// Identifies which pane is currently focused in the TUI layout.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Pane {
-    /// Main chat/conversation pane.
-    Chat,
-    /// Diff viewer pane.
-    Diff,
-    /// Task list pane.
-    Tasks,
-    /// Sub-agent list pane.
-    Agents,
-    /// Status overview pane.
-    Status,
-    /// Background jobs pane.
-    Jobs,
+//! UI-agnostic shell state management.
+//!
+//! Provides an Elm-style reducer (`ShellState` + `reduce`) that any frontend
+//! (TUI, Web, GUI, Android) can use to manage application state without
+//! depending on any specific UI framework.
+
+use std::path::PathBuf;
+
+use serde::{Deserialize, Serialize};
+use codewhale_engine::{AppMode, ApprovalMode, EngineEvent, EngineOp};
+
+/// Summary of a conversation message for state tracking.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MessageSummary {
+    pub role: String,
+    pub content_preview: String,
+    pub turn_id: Option<String>,
 }
 
-/// Events fed into the UI state machine from user input or runtime updates.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UiEvent {
-    /// A key was pressed by the user.
-    KeyPressed(char),
-    /// The user submitted a prompt string.
-    PromptSubmitted(String),
-    /// A partial response arrived from the model.
-    ResponseDelta(String),
-    /// A tool began executing.
-    ToolStarted(String),
-    /// A tool finished executing.
-    ToolFinished(String),
-    /// A background job was queued.
-    JobQueued(String),
-    /// A background job reported progress.
-    JobProgress { job_id: String, progress: u8 },
-    /// A background job completed.
-    JobCompleted(String),
-    /// An exec approval was requested from the user.
-    ApprovalRequested(String),
-    /// An exec approval was resolved.
-    ApprovalResolved(String),
-    /// The user requested a pause.
-    PauseRequested,
-    /// The user requested a resume.
-    ResumeRequested,
-    /// Periodic tick for background work scheduling.
-    Tick,
+/// Summary of an active tool call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActiveTool {
+    pub id: String,
+    pub name: String,
 }
 
-/// Side effects emitted by the state machine in response to events.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum UiEffect {
-    /// The UI should re-render.
-    Render,
-    /// A checkpoint should be persisted to the state store.
-    PersistCheckpoint,
-    /// A background refresh should be scheduled.
-    ScheduleBackgroundRefresh,
-    /// A status line message should be emitted to the footer.
-    EmitStatusLine(String),
+/// Pending approval request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingApproval {
+    pub id: String,
+    pub tool_name: String,
+    pub description: String,
 }
 
-/// The complete UI state, driven by [`UiEvent`] via [`UiState::reduce`].
-#[derive(Debug, Clone)]
-pub struct UiState {
-    /// Currently active/focused pane.
-    pub active_pane: Pane,
-    /// Whether the UI is paused (no new work dispatched).
-    pub paused: bool,
-    /// Most recent partial response delta from the model.
-    pub last_response_delta: Option<String>,
-    /// Name of the currently executing tool, if any.
-    pub active_tool: Option<String>,
-    /// Number of tasks waiting to be processed.
-    pub pending_tasks: usize,
-    /// Number of active background jobs.
-    pub active_jobs: usize,
-    /// Number of pending approval requests.
-    pub pending_approvals: usize,
-    /// Current status line text shown in the footer.
+/// Pending user input request.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingUserInput {
+    pub id: String,
+    pub prompt: String,
+}
+
+/// Summary of a sub-agent.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubAgentSummary {
+    pub id: String,
+    pub status: String,
+    pub prompt_preview: String,
+}
+
+/// The complete UI-agnostic shell state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShellState {
+    // Session
+    pub session_id: String,
+    pub messages: Vec<MessageSummary>,
+    pub model: String,
+    pub mode: AppMode,
+    pub approval_mode: ApprovalMode,
+    pub workspace: PathBuf,
+
+    // Streaming
+    pub is_streaming: bool,
+    pub streaming_content: String,
+    pub thinking_content: Option<String>,
+
+    // Tools
+    pub active_tools: Vec<ActiveTool>,
+    pub pending_approvals: Vec<PendingApproval>,
+    pub pending_user_inputs: Vec<PendingUserInput>,
+
+    // Sub-agents
+    pub sub_agents: Vec<SubAgentSummary>,
+
+    // Status
+    pub is_paused: bool,
     pub status_line: String,
+    pub last_error: Option<String>,
 }
 
-impl Default for UiState {
+impl Default for ShellState {
     fn default() -> Self {
         Self {
-            active_pane: Pane::Chat,
-            paused: false,
-            last_response_delta: None,
-            active_tool: None,
-            pending_tasks: 0,
-            active_jobs: 0,
-            pending_approvals: 0,
+            session_id: String::new(),
+            messages: Vec::new(),
+            model: String::new(),
+            mode: AppMode::Agent,
+            approval_mode: ApprovalMode::default(),
+            workspace: PathBuf::new(),
+            is_streaming: false,
+            streaming_content: String::new(),
+            thinking_content: None,
+            active_tools: Vec::new(),
+            pending_approvals: Vec::new(),
+            pending_user_inputs: Vec::new(),
+            sub_agents: Vec::new(),
+            is_paused: false,
             status_line: "ready".to_string(),
+            last_error: None,
         }
     }
 }
 
-impl UiState {
-    /// Process a UI event, updating internal state and returning side effects.
-    pub fn reduce(&mut self, event: UiEvent) -> Vec<UiEffect> {
-        match event {
-            UiEvent::KeyPressed('1') => {
-                self.active_pane = Pane::Chat;
-                vec![UiEffect::Render]
-            }
-            UiEvent::KeyPressed('2') => {
-                self.active_pane = Pane::Diff;
-                vec![UiEffect::Render]
-            }
-            UiEvent::KeyPressed('3') => {
-                self.active_pane = Pane::Tasks;
-                vec![UiEffect::Render]
-            }
-            UiEvent::KeyPressed('4') => {
-                self.active_pane = Pane::Agents;
-                vec![UiEffect::Render]
-            }
-            UiEvent::KeyPressed('5') => {
-                self.active_pane = Pane::Jobs;
-                vec![UiEffect::Render]
-            }
-            UiEvent::PromptSubmitted(_) => {
-                self.pending_tasks = self.pending_tasks.saturating_add(1);
-                self.status_line = "prompt submitted".to_string();
-                vec![
-                    UiEffect::Render,
-                    UiEffect::PersistCheckpoint,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::ResponseDelta(delta) => {
-                self.last_response_delta = Some(delta);
-                self.status_line = "streaming response".to_string();
-                vec![
-                    UiEffect::Render,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::ToolStarted(name) => {
-                self.active_tool = Some(name.clone());
-                self.status_line = format!("tool running: {name}");
-                vec![
-                    UiEffect::Render,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::ToolFinished(name) => {
-                self.active_tool = None;
-                self.pending_tasks = self.pending_tasks.saturating_sub(1);
-                self.status_line = format!("tool finished: {name}");
-                vec![
-                    UiEffect::Render,
-                    UiEffect::PersistCheckpoint,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::JobQueued(_) => {
-                self.active_jobs = self.active_jobs.saturating_add(1);
-                self.status_line = "job queued".to_string();
-                vec![UiEffect::Render, UiEffect::PersistCheckpoint]
-            }
-            UiEvent::JobProgress { progress, .. } => {
-                self.status_line = format!("job progress: {}%", progress.min(100));
-                vec![
-                    UiEffect::Render,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::JobCompleted(_) => {
-                self.active_jobs = self.active_jobs.saturating_sub(1);
-                self.status_line = "job completed".to_string();
-                vec![
-                    UiEffect::Render,
-                    UiEffect::PersistCheckpoint,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::ApprovalRequested(_) => {
-                self.pending_approvals = self.pending_approvals.saturating_add(1);
-                self.status_line = "approval requested".to_string();
-                vec![
-                    UiEffect::Render,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::ApprovalResolved(_) => {
-                self.pending_approvals = self.pending_approvals.saturating_sub(1);
-                self.status_line = "approval resolved".to_string();
-                vec![
-                    UiEffect::Render,
-                    UiEffect::PersistCheckpoint,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::PauseRequested => {
-                self.paused = true;
-                self.status_line = "paused".to_string();
-                vec![
-                    UiEffect::Render,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::ResumeRequested => {
-                self.paused = false;
-                self.status_line = "resumed".to_string();
-                vec![
-                    UiEffect::Render,
-                    UiEffect::EmitStatusLine(self.status_line.clone()),
-                ]
-            }
-            UiEvent::Tick => vec![UiEffect::ScheduleBackgroundRefresh],
-            UiEvent::KeyPressed(_) => Vec::new(),
-        }
-    }
+/// Side effects emitted by the reducer.
+#[derive(Debug, Clone)]
+pub enum ShellEffect {
+    /// Send an operation to the engine.
+    SendOp(EngineOp),
+    /// Submit an approval decision.
+    SubmitApproval { id: String, approved: bool },
+    /// Submit user input.
+    SubmitUserInput { id: String, response: String },
+    /// Persist a checkpoint.
+    PersistCheckpoint,
+    /// Request UI redraw.
+    RequestRedraw,
+    /// Display a notification.
+    Notify { kind: String, message: String },
+}
 
-    /// Produce a human-readable summary of the current state for debugging.
-    pub fn snapshot(&self) -> String {
-        format!(
-            "pane={:?};paused={};pending_tasks={};active_jobs={};pending_approvals={};active_tool={};status={}",
-            self.active_pane,
-            self.paused,
-            self.pending_tasks,
-            self.active_jobs,
-            self.pending_approvals,
-            self.active_tool.clone().unwrap_or_default(),
-            self.status_line
-        )
+/// User actions that any frontend can map to.
+#[derive(Debug, Clone)]
+pub enum UserAction {
+    SubmitPrompt { content: String },
+    Approve { id: String },
+    Deny { id: String },
+    Cancel,
+    ChangeMode { mode: AppMode },
+    SetModel { model: String },
+    ScrollUp,
+    ScrollDown,
+    ToggleThinking,
+    CompactContext,
+    PurgeContext,
+}
+
+/// Elm-style reducer: pure function, no side effects.
+/// Returns a list of effects that the frontend should execute.
+pub fn reduce(state: &mut ShellState, event: EngineEvent) -> Vec<ShellEffect> {
+    match event {
+        EngineEvent::MessageDelta { content, .. } => {
+            state.is_streaming = true;
+            state.streaming_content.push_str(&content);
+            state.status_line = "streaming".to_string();
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::MessageComplete { .. } => {
+            state.is_streaming = false;
+            state.streaming_content.clear();
+            state.status_line = "ready".to_string();
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::ThinkingDelta { content, .. } => {
+            state.thinking_content = Some(
+                state.thinking_content.take().unwrap_or_default() + &content
+            );
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::ThinkingComplete { .. } => {
+            state.thinking_content = None;
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::ToolCallStarted { id, name, .. } => {
+            state.active_tools.push(ActiveTool { id, name });
+            state.status_line = "tool running".to_string();
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::ToolCallComplete { id, .. } => {
+            state.active_tools.retain(|t| t.id != id);
+            if state.active_tools.is_empty() {
+                state.status_line = "ready".to_string();
+            }
+            vec![ShellEffect::RequestRedraw, ShellEffect::PersistCheckpoint]
+        }
+        EngineEvent::TurnStarted { turn_id } => {
+            state.status_line = format!("turn {turn_id} started");
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::TurnComplete { .. } => {
+            state.is_streaming = false;
+            state.streaming_content.clear();
+            state.status_line = "turn complete".to_string();
+            vec![ShellEffect::RequestRedraw, ShellEffect::PersistCheckpoint]
+        }
+        EngineEvent::ApprovalRequired { id, tool_name, description, .. } => {
+            state.pending_approvals.push(PendingApproval {
+                id,
+                tool_name,
+                description,
+            });
+            state.status_line = "approval required".to_string();
+            vec![ShellEffect::RequestRedraw, ShellEffect::Notify {
+                kind: "approval".to_string(),
+                message: "Tool approval required".to_string(),
+            }]
+        }
+        EngineEvent::UserInputRequired { id, request } => {
+            let prompt = request.as_object()
+                .and_then(|o| o.get("prompt"))
+                .and_then(|v| v.as_str())
+                .unwrap_or("Input required")
+                .to_string();
+            state.pending_user_inputs.push(PendingUserInput { id, prompt });
+            state.status_line = "user input required".to_string();
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::AgentSpawned { id, prompt } => {
+            state.sub_agents.push(SubAgentSummary {
+                id,
+                status: "running".to_string(),
+                prompt_preview: prompt.chars().take(80).collect(),
+            });
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::AgentComplete { id, .. } => {
+            if let Some(agent) = state.sub_agents.iter_mut().find(|a| a.id == id) {
+                agent.status = "completed".to_string();
+            }
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::Error { envelope, .. } => {
+            state.last_error = Some(envelope.message.clone());
+            state.status_line = format!("error: {}", envelope.message);
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::Status { message } => {
+            state.status_line = message;
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::Notification { kind, message } => {
+            vec![ShellEffect::Notify {
+                kind: format!("{kind:?}").to_lowercase(),
+                message,
+            }]
+        }
+        EngineEvent::SessionUpdated { session_id, .. } => {
+            state.session_id = session_id;
+            vec![ShellEffect::PersistCheckpoint]
+        }
+        EngineEvent::PauseEvents => {
+            state.is_paused = true;
+            vec![ShellEffect::RequestRedraw]
+        }
+        EngineEvent::ResumeEvents => {
+            state.is_paused = false;
+            vec![ShellEffect::RequestRedraw]
+        }
+        // Default: just request redraw for unhandled events
+        _ => vec![ShellEffect::RequestRedraw],
+    }
+}
+
+/// Map user actions to shell effects.
+pub fn handle_user_action(state: &ShellState, action: UserAction) -> Vec<ShellEffect> {
+    match action {
+        UserAction::SubmitPrompt { content } => vec![ShellEffect::SendOp(EngineOp::SendMessage {
+            content,
+            mode: state.mode,
+            model: state.model.clone(),
+            goal_objective: None,
+            reasoning_effort: None,
+            reasoning_effort_auto: false,
+            auto_model: false,
+            allow_shell: true,
+            trust_mode: false,
+            auto_approve: false,
+            approval_mode: state.approval_mode,
+            translation_enabled: false,
+            show_thinking: false,
+            allowed_tools: None,
+            hook_executor_name: None,
+        })],
+        UserAction::Approve { id } => vec![ShellEffect::SubmitApproval { id, approved: true }],
+        UserAction::Deny { id } => vec![ShellEffect::SubmitApproval { id, approved: false }],
+        UserAction::Cancel => vec![ShellEffect::SendOp(EngineOp::CancelRequest)],
+        UserAction::ChangeMode { mode } => vec![ShellEffect::SendOp(EngineOp::ChangeMode { mode })],
+        UserAction::SetModel { model } => vec![ShellEffect::SendOp(EngineOp::SetModel {
+            model,
+            mode: state.mode,
+        })],
+        UserAction::ScrollUp | UserAction::ScrollDown | UserAction::ToggleThinking => {
+            vec![ShellEffect::RequestRedraw]
+        }
+        UserAction::CompactContext => vec![ShellEffect::SendOp(EngineOp::CompactContext)],
+        UserAction::PurgeContext => vec![ShellEffect::SendOp(EngineOp::PurgeContext)],
     }
 }
 
@@ -232,239 +289,49 @@ impl UiState {
 mod tests {
     use super::*;
 
-    // ── Default state ──────────────────────────────────────────────────
-
     #[test]
-    fn default_state_is_chat_pane_and_ready() {
-        let state = UiState::default();
-        assert_eq!(state.active_pane, Pane::Chat);
-        assert!(!state.paused);
-        assert_eq!(state.last_response_delta, None);
-        assert_eq!(state.active_tool, None);
-        assert_eq!(state.pending_tasks, 0);
-        assert_eq!(state.active_jobs, 0);
-        assert_eq!(state.pending_approvals, 0);
-        assert_eq!(state.status_line, "ready");
-    }
-
-    // ── Key navigation ─────────────────────────────────────────────────
-
-    #[test]
-    fn key_1_switches_to_chat_pane() {
-        let mut state = UiState::default();
-        let effects = state.reduce(UiEvent::KeyPressed('1'));
-        assert_eq!(state.active_pane, Pane::Chat);
-        assert_eq!(effects, vec![UiEffect::Render]);
+    fn default_state_is_agent_mode() {
+        let state = ShellState::default();
+        assert_eq!(state.mode, AppMode::Agent);
+        assert_eq!(state.approval_mode, ApprovalMode::Suggest);
+        assert!(!state.is_streaming);
+        assert!(state.active_tools.is_empty());
+        assert!(state.pending_approvals.is_empty());
     }
 
     #[test]
-    fn key_2_switches_to_diff_pane() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::KeyPressed('2'));
-        assert_eq!(state.active_pane, Pane::Diff);
-    }
-
-    #[test]
-    fn key_3_switches_to_tasks_pane() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::KeyPressed('3'));
-        assert_eq!(state.active_pane, Pane::Tasks);
-    }
-
-    #[test]
-    fn key_4_switches_to_agents_pane() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::KeyPressed('4'));
-        assert_eq!(state.active_pane, Pane::Agents);
-    }
-
-    #[test]
-    fn key_5_switches_to_jobs_pane() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::KeyPressed('5'));
-        assert_eq!(state.active_pane, Pane::Jobs);
-    }
-
-    #[test]
-    fn unknown_key_produces_no_effects() {
-        let mut state = UiState::default();
-        let effects = state.reduce(UiEvent::KeyPressed('x'));
-        assert!(effects.is_empty());
-        assert_eq!(state.active_pane, Pane::Chat);
-    }
-
-    // ── Prompt lifecycle ───────────────────────────────────────────────
-
-    #[test]
-    fn prompt_submitted_increments_pending_tasks() {
-        let mut state = UiState::default();
-        let effects = state.reduce(UiEvent::PromptSubmitted("hello".to_string()));
-        assert_eq!(state.pending_tasks, 1);
-        assert_eq!(state.status_line, "prompt submitted");
-        assert!(effects.contains(&UiEffect::Render));
-        assert!(effects.contains(&UiEffect::PersistCheckpoint));
-    }
-
-    #[test]
-    fn response_delta_updates_last_delta() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::ResponseDelta("partial".to_string()));
-        assert_eq!(state.last_response_delta, Some("partial".to_string()));
-        assert_eq!(state.status_line, "streaming response");
-    }
-
-    // ── Tool lifecycle ─────────────────────────────────────────────────
-
-    #[test]
-    fn tool_started_sets_active_tool() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::ToolStarted("shell".to_string()));
-        assert_eq!(state.active_tool, Some("shell".to_string()));
-        assert_eq!(state.status_line, "tool running: shell");
-    }
-
-    #[test]
-    fn tool_finished_clears_active_tool_and_decrements_tasks() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::PromptSubmitted("test".to_string()));
-        assert_eq!(state.pending_tasks, 1);
-        state.reduce(UiEvent::ToolFinished("shell".to_string()));
-        assert_eq!(state.active_tool, None);
-        assert_eq!(state.pending_tasks, 0);
-        assert_eq!(state.status_line, "tool finished: shell");
-    }
-
-    #[test]
-    fn tool_finished_saturates_at_zero() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::ToolFinished("shell".to_string()));
-        assert_eq!(state.pending_tasks, 0);
-    }
-
-    // ── Job lifecycle ──────────────────────────────────────────────────
-
-    #[test]
-    fn job_queued_increments_active_jobs() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::JobQueued("build".to_string()));
-        assert_eq!(state.active_jobs, 1);
-        assert_eq!(state.status_line, "job queued");
-    }
-
-    #[test]
-    fn job_progress_updates_status_line() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::JobProgress {
-            job_id: "j1".to_string(),
-            progress: 75,
+    fn message_delta_updates_streaming() {
+        let mut state = ShellState::default();
+        let effects = reduce(&mut state, EngineEvent::MessageDelta {
+            index: 0,
+            content: "hello".to_string(),
         });
-        assert_eq!(state.status_line, "job progress: 75%");
+        assert!(state.is_streaming);
+        assert_eq!(state.streaming_content, "hello");
+        assert!(effects.iter().any(|e| matches!(e, ShellEffect::RequestRedraw)));
     }
 
     #[test]
-    fn job_progress_clamps_over_100() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::JobProgress {
-            job_id: "j1".to_string(),
-            progress: 150,
+    fn approval_required_adds_pending() {
+        let mut state = ShellState::default();
+        reduce(&mut state, EngineEvent::ApprovalRequired {
+            id: "1".to_string(),
+            tool_name: "exec_shell".to_string(),
+            description: "Run command".to_string(),
+            input: serde_json::Value::Null,
+            approval_key: String::new(),
+            approval_grouping_key: String::new(),
+            intent_summary: None,
         });
-        assert_eq!(state.status_line, "job progress: 100%");
+        assert_eq!(state.pending_approvals.len(), 1);
     }
 
     #[test]
-    fn job_completed_decrements_active_jobs() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::JobQueued("build".to_string()));
-        assert_eq!(state.active_jobs, 1);
-        state.reduce(UiEvent::JobCompleted("build".to_string()));
-        assert_eq!(state.active_jobs, 0);
-        assert_eq!(state.status_line, "job completed");
-    }
-
-    #[test]
-    fn job_completed_saturates_at_zero() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::JobCompleted("build".to_string()));
-        assert_eq!(state.active_jobs, 0);
-    }
-
-    // ── Approval lifecycle ─────────────────────────────────────────────
-
-    #[test]
-    fn approval_requested_increments_pending() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::ApprovalRequested("exec".to_string()));
-        assert_eq!(state.pending_approvals, 1);
-        assert_eq!(state.status_line, "approval requested");
-    }
-
-    #[test]
-    fn approval_resolved_decrements_pending() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::ApprovalRequested("exec".to_string()));
-        state.reduce(UiEvent::ApprovalResolved("exec".to_string()));
-        assert_eq!(state.pending_approvals, 0);
-        assert_eq!(state.status_line, "approval resolved");
-    }
-
-    #[test]
-    fn approval_resolved_saturates_at_zero() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::ApprovalResolved("exec".to_string()));
-        assert_eq!(state.pending_approvals, 0);
-    }
-
-    // ── Pause/Resume ───────────────────────────────────────────────────
-
-    #[test]
-    fn pause_sets_paused_flag() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::PauseRequested);
-        assert!(state.paused);
-        assert_eq!(state.status_line, "paused");
-    }
-
-    #[test]
-    fn resume_clears_paused_flag() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::PauseRequested);
-        state.reduce(UiEvent::ResumeRequested);
-        assert!(!state.paused);
-        assert_eq!(state.status_line, "resumed");
-    }
-
-    // ── Tick ────────────────────────────────────────────────────────────
-
-    #[test]
-    fn tick_schedules_background_refresh() {
-        let mut state = UiState::default();
-        let effects = state.reduce(UiEvent::Tick);
-        assert_eq!(effects, vec![UiEffect::ScheduleBackgroundRefresh]);
-    }
-
-    // ── Snapshot ────────────────────────────────────────────────────────
-
-    #[test]
-    fn snapshot_contains_all_fields() {
-        let state = UiState::default();
-        let snap = state.snapshot();
-        assert!(snap.contains("pane=Chat"));
-        assert!(snap.contains("paused=false"));
-        assert!(snap.contains("pending_tasks=0"));
-        assert!(snap.contains("active_jobs=0"));
-        assert!(snap.contains("pending_approvals=0"));
-        assert!(snap.contains("status=ready"));
-    }
-
-    #[test]
-    fn snapshot_reflects_state_changes() {
-        let mut state = UiState::default();
-        state.reduce(UiEvent::KeyPressed('2'));
-        state.reduce(UiEvent::PauseRequested);
-        state.reduce(UiEvent::PromptSubmitted("test".to_string()));
-        let snap = state.snapshot();
-        assert!(snap.contains("pane=Diff"));
-        assert!(snap.contains("paused=true"));
-        assert!(snap.contains("pending_tasks=1"));
+    fn submit_prompt_creates_send_op() {
+        let state = ShellState::default();
+        let effects = handle_user_action(&state, UserAction::SubmitPrompt {
+            content: "hello".to_string(),
+        });
+        assert!(matches!(effects[0], ShellEffect::SendOp(EngineOp::SendMessage { .. })));
     }
 }

@@ -15,9 +15,10 @@ use crate::localization::resolve_locale;
 use crate::models::{ContentBlock, Message, MessageRequest, MessageResponse, SystemPrompt};
 use crate::settings::Settings;
 use crate::tui::app::{
-    App, AppAction, AppMode, OnboardingState, ReasoningEffort, SidebarFocus, VimMode,
+    App, AppAction, OnboardingState, ReasoningEffort, SidebarFocus, VimMode,
 };
-use crate::tui::approval::ApprovalMode;
+use codewhale_engine::AppMode;
+use codewhale_engine::ApprovalMode;
 use anyhow::Result;
 
 /// Open the interactive config editor.
@@ -1386,7 +1387,7 @@ mod tests {
     use crate::config::Config;
     use crate::test_support::lock_test_env;
     use crate::tui::app::{App, TuiOptions};
-    use crate::tui::approval::ApprovalMode;
+    use codewhale_engine::ApprovalMode;
     use std::env;
     use std::ffi::OsString;
     use std::fs;

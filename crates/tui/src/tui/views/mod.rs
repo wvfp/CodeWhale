@@ -178,7 +178,7 @@ pub enum ViewEvent {
     },
     /// Emitted by the `/mode` picker when the user chooses a mode.
     ModeSelected {
-        mode: crate::tui::app::AppMode,
+        mode: codewhale_engine::AppMode,
     },
     /// Emitted by the `/statusline` picker every time the user toggles an
     /// item (live preview) and once more on Enter (final). The handler

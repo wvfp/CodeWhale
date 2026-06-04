@@ -9,8 +9,8 @@
 
 use crate::models::SystemPrompt;
 use crate::project_context::{ProjectContext, load_project_context_with_parents};
-use crate::tui::app::AppMode;
-use crate::tui::approval::ApprovalMode;
+use codewhale_engine::AppMode;
+use codewhale_engine::ApprovalMode;
 use novel::CreationStage;
 use std::path::{Path, PathBuf};
 

@@ -33,7 +33,7 @@ use crate::tools::spec::RuntimeToolServices;
 use crate::tools::subagent::SubAgentResult;
 use crate::tools::todo::{SharedTodoList, new_shared_todo_list};
 use crate::tui::active_cell::ActiveCell;
-use crate::tui::approval::ApprovalMode;
+use codewhale_engine::ApprovalMode;
 use crate::tui::clipboard::{ClipboardContent, ClipboardHandler};
 use crate::tui::file_mention::ContextReference;
 use crate::tui::history::{HistoryCell, TranscriptRenderOptions};
@@ -140,17 +140,10 @@ fn onboarding_is_workspace_trust_gate(
 }
 
 /// Supported application modes for the TUI.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AppMode {
-    Agent,
-    Yolo,
-    Plan,
-    /// Long-form web-novel writing mode. Mirrors Agent's toolset and
-    /// approval behaviour (Suggest) but is steered by a novel-specific
-    /// system prompt so the model focuses on character / chapter / plot
-    /// work instead of software-engineering tasks.
-    Novel,
-}
+///
+/// Re-exported from `codewhale_engine` so that all crates share a single
+/// canonical definition. The local enum definition has been removed.
+pub use codewhale_engine::AppMode;
 
 /// One row in the per-turn cache-telemetry ring (`/cache` debug surface, #263).
 #[derive(Debug, Clone)]
@@ -768,49 +761,6 @@ fn match_kitty_csi_fragment(chars: &[char], start: usize) -> Option<usize> {
 
 const MAX_SUBMITTED_INPUT_CHARS: usize = 16_000;
 const MAX_DRAFT_HISTORY: usize = 50;
-
-impl AppMode {
-    #[must_use]
-    pub fn from_setting(value: &str) -> Self {
-        match value.trim().to_ascii_lowercase().as_str() {
-            "plan" => Self::Plan,
-            "yolo" => Self::Yolo,
-            "novel" => Self::Novel,
-            _ => Self::Agent,
-        }
-    }
-
-    #[must_use]
-    pub fn as_setting(self) -> &'static str {
-        match self {
-            Self::Agent => "agent",
-            Self::Yolo => "yolo",
-            Self::Plan => "plan",
-            Self::Novel => "novel",
-        }
-    }
-
-    /// Short label used in the UI footer.
-    pub fn label(self) -> &'static str {
-        match self {
-            AppMode::Agent => "AGENT",
-            AppMode::Yolo => "YOLO",
-            AppMode::Plan => "PLAN",
-            AppMode::Novel => "NOVEL",
-        }
-    }
-
-    #[allow(dead_code)]
-    /// Description shown in help or onboarding text.
-    pub fn description(self) -> &'static str {
-        match self {
-            AppMode::Agent => "Agent mode - autonomous task execution with tools",
-            AppMode::Yolo => "YOLO mode - full tool access without approvals",
-            AppMode::Plan => "Plan mode - design before implementing",
-            AppMode::Novel => "Novel mode - long-form web novel writing assistant",
-        }
-    }
-}
 
 /// Configuration required to bootstrap the TUI.
 #[derive(Clone)]
@@ -1432,6 +1382,9 @@ pub struct App {
     pub mcp_restart_required: bool,
     /// Tool execution log
     pub tool_log: Vec<String>,
+    /// UI-agnostic business state (Elm reducer pattern).
+    /// Dual-write with existing App fields for gradual migration.
+    pub shell_state: codewhale_shell::ShellState,
     /// Active skill to apply to next user message
     pub active_skill: Option<String>,
     /// Cached (name, description) pairs from the skill registry.
@@ -2123,6 +2076,7 @@ impl App {
                 .unwrap_or(0),
             mcp_restart_required: false,
             tool_log: Vec::new(),
+            shell_state: codewhale_shell::ShellState::default(),
             active_skill: None,
             cached_skills,
             tool_cells: HashMap::new(),

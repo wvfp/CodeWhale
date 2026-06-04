@@ -1,0 +1,24 @@
+[package]
+name = "codewhale-engine"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "UI-agnostic engine abstraction for CodeWhale multi-frontend architecture"
+
+[dependencies]
+codewhale-protocol = { path = "../protocol", version = "0.8.52" }
+codewhale-tools = { path = "../tools", version = "0.8.52" }
+codewhale-config = { path = "../config", version = "0.8.52" }
+codewhale-agent = { path = "../agent", version = "0.8.52" }
+codewhale-mcp = { path = "../mcp", version = "0.8.52" }
+codewhale-state = { path = "../state", version = "0.8.52" }
+codewhale-hooks = { path = "../hooks", version = "0.8.52" }
+codewhale-execpolicy = { path = "../execpolicy", version = "0.8.52" }
+novel = { path = "../novel" }
+tokio = { workspace = true, features = ["sync"] }
+tokio-util = { version = "0.7.16", features = ["rt"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+async-trait = { workspace = true }

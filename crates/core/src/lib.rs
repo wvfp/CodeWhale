@@ -1,3 +1,5 @@
+pub mod engine_adapter;
+
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -26,6 +28,8 @@ use codewhale_state::{
 use codewhale_tools::{ToolCall, ToolRegistry};
 use serde_json::{Value, json};
 use uuid::Uuid;
+
+pub use engine_adapter::RuntimeEngine;
 
 /// How a new thread's conversation history is initialized.
 #[derive(Debug, Clone)]

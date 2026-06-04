@@ -880,7 +880,29 @@ name = "codewhale-core"
 version = "0.8.52"
 dependencies = [
  "anyhow",
+ "async-trait",
  "chrono",
+ "codewhale-agent",
+ "codewhale-config",
+ "codewhale-engine",
+ "codewhale-execpolicy",
+ "codewhale-hooks",
+ "codewhale-mcp",
+ "codewhale-protocol",
+ "codewhale-state",
+ "codewhale-tools",
+ "serde_json",
+ "tokio",
+ "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "codewhale-engine"
+version = "0.8.52"
+dependencies = [
+ "anyhow",
+ "async-trait",
  "codewhale-agent",
  "codewhale-config",
  "codewhale-execpolicy",
@@ -889,8 +911,11 @@ dependencies = [
  "codewhale-protocol",
  "codewhale-state",
  "codewhale-tools",
+ "novel",
+ "serde",
  "serde_json",
- "uuid",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]
@@ -958,6 +983,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "codewhale-shell"
+version = "0.8.52"
+dependencies = [
+ "codewhale-engine",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "codewhale-state"
 version = "0.8.52"
 dependencies = [
@@ -997,9 +1031,11 @@ dependencies = [
  "clap",
  "clap_complete",
  "codewhale-config",
+ "codewhale-engine",
  "codewhale-protocol",
  "codewhale-release",
  "codewhale-secrets",
+ "codewhale-shell",
  "codewhale-tools",
  "colored",
  "crossterm 0.28.1",
@@ -1052,10 +1088,6 @@ dependencies = [
  "wiremock",
  "zeroize",
 ]
-
-[[package]]
-name = "codewhale-tui-core"
-version = "0.8.52"
 
 [[package]]
 name = "colorchoice"
@@ -5243,6 +5275,7 @@ dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
  "pin-project-lite",
  "tokio",
 ]

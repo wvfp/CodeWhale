@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::palette;
-use crate::tui::app::AppMode;
+use codewhale_engine::AppMode;
 use crate::tui::views::{ModalKind, ModalView, ViewAction, ViewEvent};
 
 #[derive(Debug, Clone, Copy)]

@@ -52,7 +52,7 @@ use crate::tools::subagent::{
 use crate::tools::todo::{SharedTodoList, TodoListSnapshot, new_shared_todo_list};
 use crate::tools::user_input::{UserInputRequest, UserInputResponse};
 use crate::tools::{ToolContext, ToolRegistryBuilder};
-use crate::tui::app::AppMode;
+use codewhale_engine::AppMode;
 use crate::utils::spawn_supervised;
 use crate::working_set::WorkingSet;
 
@@ -386,59 +386,41 @@ impl Default for EngineConfig {
     }
 }
 
-/// Reason the active turn was cancelled. The token from `tokio_util`
-/// does not carry a cause, so the engine keeps a sibling latch for
-/// approval and user-input waits that need to explain cancellation.
+/// Reason the active turn was cancelled. Re-exported from the engine crate
+/// for TUI-internal use. New frontends should use `codewhale_engine::CancelReason`.
+pub use codewhale_engine::CancelReason;
+
+/// Handle to communicate with the engine.
 ///
-/// `External`, `Preempted`, and `Internal` are reserved for the
-/// remaining direct cancellation paths tracked in #1541.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)]
-pub enum CancelReason {
-    /// User-initiated cancel (Esc, `/cancel`, click cancel on modal).
-    User,
-    /// External / runtime-API cancel (HTTP `DELETE /v1/threads/...`,
-    /// task manager stop, parent agent cancel).
-    External,
-    /// Cancel triggered when a new turn starts before the previous one
-    /// finished — e.g. plain Enter while busy after the queueing path
-    /// pre-empts the running turn.
-    Preempted,
-    /// Engine internals tore down the turn (drop, channel close,
-    /// shutdown). Rare — surfaced as an internal error.
-    Internal,
-}
+/// Re-exported from `codewhale_engine` — the UI-agnostic crate that all
+/// frontends share. The TUI-specific `TuiEngineHandle` below wraps the
+/// internal mpsc channels that the TUI engine loop consumes directly.
+#[allow(unused_imports)]
+pub use codewhale_engine::EngineHandle;
 
-impl CancelReason {
-    fn describe(self) -> &'static str {
-        match self {
-            Self::User => "user cancelled the request",
-            Self::External => "request cancelled by external caller",
-            Self::Preempted => "request was preempted by a new turn",
-            Self::Internal => "engine torn down before approval resolved",
-        }
-    }
-}
-
-/// Handle to communicate with the engine
+/// TUI-internal handle that wraps the raw mpsc channels consumed by the
+/// TUI engine loop. This type is **not** part of the public engine API;
+/// it exists so the TUI engine can keep using its `Op` / `Event` /
+/// `ApprovalDecision` / `UserInputDecision` channel types without
+/// serializing every message.
 #[derive(Clone)]
-pub struct EngineHandle {
+pub(crate) struct TuiEngineHandle {
     /// Send operations to the engine
     pub tx_op: mpsc::Sender<Op>,
     /// Receive events from the engine
     pub rx_event: Arc<RwLock<mpsc::Receiver<Event>>>,
     /// Shared pointer to the cancellation token for the current request.
-    cancel_token: Arc<StdMutex<CancellationToken>>,
+    pub cancel_token: Arc<StdMutex<CancellationToken>>,
     /// Latched reason for the most recent cancellation. Read by the
     /// approval / user-input handlers to enrich their error strings.
     /// Cleared by the engine when a fresh turn starts.
-    cancel_reason: Arc<StdMutex<Option<CancelReason>>>,
+    pub cancel_reason: Arc<StdMutex<Option<CancelReason>>>,
     /// Send approval decisions to the engine
-    tx_approval: mpsc::Sender<ApprovalDecision>,
+    pub tx_approval: mpsc::Sender<ApprovalDecision>,
     /// Send user input responses to the engine
-    tx_user_input: mpsc::Sender<UserInputDecision>,
+    pub tx_user_input: mpsc::Sender<UserInputDecision>,
     /// Send steer input for an in-flight turn.
-    tx_steer: mpsc::Sender<String>,
+    pub tx_steer: mpsc::Sender<String>,
 }
 
 // `impl EngineHandle { ... }` moved to `engine/handle.rs` so the
@@ -577,7 +559,7 @@ impl Engine {
     }
 
     /// Create a new engine with the given configuration
-    pub fn new(config: EngineConfig, api_config: &Config) -> (Self, EngineHandle) {
+    pub fn new(config: EngineConfig, api_config: &Config) -> (Self, TuiEngineHandle) {
         if let Some(objective) = normalized_goal_objective(config.goal_objective.as_deref()) {
             sync_goal_state_from_host(&config.goal_state, Some(&objective), None, false);
         }
@@ -755,7 +737,7 @@ impl Engine {
         };
         engine.rehydrate_latest_canonical_state();
 
-        let handle = EngineHandle {
+        let handle = TuiEngineHandle {
             tx_op,
             rx_event: Arc::new(RwLock::new(rx_event)),
             cancel_token: shared_cancel_token,
@@ -774,7 +756,7 @@ impl Engine {
         mode: AppMode,
         trust_mode: bool,
         auto_approve: bool,
-        approval_mode: crate::tui::approval::ApprovalMode,
+        approval_mode: codewhale_engine::ApprovalMode,
     ) {
         self.reset_cancel_token();
         self.turn_counter = self.turn_counter.saturating_add(1);
@@ -797,7 +779,7 @@ impl Engine {
         self.config.trust_mode = trust_mode;
         self.session.auto_approve = auto_approve;
         self.session.approval_mode = if auto_approve {
-            crate::tui::approval::ApprovalMode::Auto
+            codewhale_engine::ApprovalMode::Auto
         } else {
             approval_mode
         };
@@ -1476,7 +1458,7 @@ In {new} mode: {policy}\n\n\
         allow_shell: bool,
         trust_mode: bool,
         auto_approve: bool,
-        approval_mode: crate::tui::approval::ApprovalMode,
+        approval_mode: codewhale_engine::ApprovalMode,
         translation_enabled: bool,
         show_thinking: bool,
         allowed_tools: Option<Vec<String>>,
@@ -1603,7 +1585,7 @@ In {new} mode: {policy}\n\n\
         self.config.show_thinking = show_thinking;
         self.session.auto_approve = auto_approve;
         self.session.approval_mode = if auto_approve {
-            crate::tui::approval::ApprovalMode::Auto
+            codewhale_engine::ApprovalMode::Auto
         } else {
             approval_mode
         };
@@ -2143,7 +2125,9 @@ In {new} mode: {policy}\n\n\
         let trusted = crate::workspace_trust::WorkspaceTrust::load_for(&self.session.workspace);
         let mut trusted_external_paths = trusted.paths().to_vec();
         let clipboard_images_dir =
-            crate::tui::clipboard::clipboard_images_dir(&self.session.workspace);
+            dirs::home_dir()
+                .map(|h| h.join(".codewhale").join("clipboard-images"))
+                .unwrap_or_else(|| self.session.workspace.join("clipboard-images"));
         if !trusted_external_paths
             .iter()
             .any(|path| path == &clipboard_images_dir)
@@ -2559,7 +2543,7 @@ fn goal_objective_for_prompt(
 }
 
 /// Spawn the engine in a background task
-pub fn spawn_engine(config: EngineConfig, api_config: &Config) -> EngineHandle {
+pub fn spawn_engine(config: EngineConfig, api_config: &Config) -> TuiEngineHandle {
     let (engine, handle) = Engine::new(config, api_config);
 
     spawn_supervised(
@@ -2575,7 +2559,7 @@ pub fn spawn_engine(config: EngineConfig, api_config: &Config) -> EngineHandle {
 
 #[cfg(test)]
 pub(crate) struct MockEngineHandle {
-    pub handle: EngineHandle,
+    pub handle: TuiEngineHandle,
     pub rx_op: mpsc::Receiver<Op>,
     rx_approval: mpsc::Receiver<ApprovalDecision>,
     pub rx_steer: mpsc::Receiver<String>,
@@ -2621,7 +2605,7 @@ pub(crate) fn mock_engine_handle() -> MockEngineHandle {
     let cancel_token = CancellationToken::new();
     let shared_cancel_token = Arc::new(StdMutex::new(cancel_token.clone()));
     let cancel_reason: Arc<StdMutex<Option<CancelReason>>> = Arc::new(StdMutex::new(None));
-    let handle = EngineHandle {
+    let handle = TuiEngineHandle {
         tx_op,
         rx_event: Arc::new(RwLock::new(rx_event)),
         cancel_token: shared_cancel_token,
